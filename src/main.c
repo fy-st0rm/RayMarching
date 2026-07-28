@@ -8,6 +8,12 @@ extern Context* ctx;
 #define SPEED 250.0f
 #define MAX_GEOMETRY 32
 
+char* controls_text = 
+  "WASD    - Movement\n"
+  "L-SHIFT - Go Down\n"
+  "SPACE   - Go Up\n"
+  "ESC     - Toggle Mouse\n";
+
 // :assets def
 typedef enum {
   SHADER_RAYMARCH,
@@ -405,6 +411,13 @@ int main() {
         font_render(
           &state.imr, &state.font, text,
           (v3) { 50, 50, 0 },
+          (v4) { 1, 1, 1, 1 }
+        );
+
+        // Render Controls
+        font_render(
+          &state.imr, &state.font, controls_text,
+          (v3) { state.window.width - 400, 50, 0 },
           (v4) { 1, 1, 1, 1 }
         );
       }
