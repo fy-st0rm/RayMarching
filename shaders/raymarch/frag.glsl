@@ -84,17 +84,43 @@ SceneResult scene(vec3 p) {
 
   // Spheres
   for (int i = 0; i < spheres_count; i++) {
-    result = smooth_union(result, sphere(p, spheres[i]), 0.4);
+    result = smooth_union(result, sphere(p, spheres[i]), 0.5);
   }
 
   // Boxes
   for (int i = 0; i < boxes_count; i++) {
-    result = smooth_union(result, box(p, boxes[i]), 0.4);
+    result = smooth_union(result, box(p, boxes[i]), 0.5);
   }
 
   return result;
 }
 
+// Ray march algorithm
+SceneResult ray_march(vec3 ray_origin, vec3 ray_direction) {
+  SceneResult final_result;
+  final_result.distance = -1;
+  final_result.color = vec3(0);
+
+  float travel = 0.0;
+
+  for (int i = 0; i < 60; i++) {
+    vec3 samplePoint = ray_origin + ray_direction * travel;
+
+    SceneResult result = scene(samplePoint);
+
+    if (result.distance < 0.01) {
+      final_result.distance = travel;
+      final_result.color = result.color;
+      break;
+    }
+
+    travel += result.distance;
+  }
+
+  return final_result;
+}
+
+// Light stuff
 vec3 calculate_normal(vec3 p)
 {
   const float e = 0.001;
@@ -106,29 +132,21 @@ vec3 calculate_normal(vec3 p)
   ));
 }
 
-// Ray march algorithm
-SceneResult ray_march(vec3 ray_origin, vec3 ray_direction) {
-  SceneResult final_result;
-  final_result.distance = -1;
-  final_result.color = vec3(0);
+float soft_shadow(vec3 ro, vec3 rd) {
+  float res = 1.0;
+  float t = 0.02;
 
-  float travel = 0.0;
+  for(int i = 0; i < 32; i++) {
+    float h = scene(ro + rd * t).distance;
 
-  for (int i = 0; i < 100; i++) {
-    vec3 samplePoint = ray_origin + ray_direction * travel;
+    if(h < 0.001) return 0.0;
 
-    SceneResult result = scene(samplePoint);
+    res = min(res, 8.0 * h / t);
+    t += clamp(h, 0.01, 0.2);
 
-    if (result.distance < 0.001) {
-      final_result.distance = travel;
-      final_result.color = result.color;
-      break;
-    }
-
-    travel += result.distance;
+    if(t > 20.0) break;
   }
-
-  return final_result;
+  return clamp(res, 0.0, 1.0);
 }
 
 void main() {
@@ -145,9 +163,31 @@ void main() {
   } else {
     vec3 hitPoint = ray_origin + ray_direction * result.distance;
     vec3 normal = calculate_normal(hitPoint);
-    vec3 lightDir = normalize(vec3(1,1,-1));
-    float diffuse = max(dot(normal, lightDir),0.0);
+    vec3 lightPos = vec3(5.0, 6.0, -4.0);
+    vec3 lightDir = normalize(lightPos - hitPoint);
+    vec3 viewDir = normalize(ray_origin - hitPoint);
 
-    color = vec4(result.color * vec3(diffuse),1);
+    // Ambient
+    float ambient = 0.18;
+
+    // Diffuse
+    float diffuse = max(dot(normal, lightDir), 0.0);
+
+    // Blinn-Phong Specular
+    vec3 halfVec = normalize(lightDir + viewDir);
+    float specular = pow(max(dot(normal, halfVec), 0.0), 164.0);
+
+    // Soft shadow
+    float shadow = soft_shadow(hitPoint + normal * 0.01, lightDir);
+    diffuse *= shadow;
+    specular *= shadow;
+
+    // Final lighting
+    float lighting = ambient + diffuse * 0.9 + specular * 0.35;
+    vec3 finalColor = result.color * lighting;
+
+    // Gamma correction
+    finalColor = pow(finalColor, vec3(1.0 / 2.2));
+    color = vec4(finalColor, 1.0);
   }
 }

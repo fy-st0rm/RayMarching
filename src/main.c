@@ -5,7 +5,7 @@ extern Context* ctx;
 
 // :config
 #define FPS 60
-#define SPEED 0.05f
+#define SPEED 250.0f
 #define MAX_GEOMETRY 32
 
 // :assets def
@@ -43,6 +43,9 @@ typedef struct {
   IMR imr;
   FrameController fc;
   PCamera camera;
+  OCamera ui_camera;
+
+  Font font;
 
   // Shaders
   Shader shaders[TOTAL_SHADERS];
@@ -92,13 +95,28 @@ void state_init() {
       .far = 1000.0f,
     }
   );
+  state.ui_camera = ocamera_new(
+    (v2) {0,0},
+    1,
+    (OCamera_Boundary) {
+      .left = 0,
+      .right = state.window.width,
+      .top = 0,
+      .bottom = state.window.height,
+      .near = -1.0f,
+      .far = 1000.0f,
+    }
+  );
+
+  state.font = font_new("font.otf", 32);
 
   load_shaders();
 }
 
 void state_clean() {
-  window_delete(state.window);
+  font_delete(&state.font);
   imr_delete(&state.imr);
+  window_delete(state.window);
 }
 
 void load_shaders() {
@@ -290,22 +308,22 @@ void movement_event(Event event) {
 
 void movement_update() {
   if (state.movement[FRONT]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, SPEED * state.fc.dt));
   }
   if (state.movement[BACK]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, -SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, -SPEED * state.fc.dt));
   }
   if (state.movement[LEFT]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.right, -SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.right, -SPEED * state.fc.dt));
   }
   if (state.movement[RIGHT]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.right, SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.right, SPEED * state.fc.dt));
   }
   if (state.movement[UP]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.up, SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.up, SPEED * state.fc.dt));
   }
   if (state.movement[DOWN]) {
-    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.up, -SPEED));
+    pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.up, -SPEED * state.fc.dt));
   }
 }
 
@@ -315,19 +333,19 @@ int main() {
   log_info("Opengl Version: %s\n", glGetString(GL_VERSION));
 
   add_sphere((Sphere) {
-    .center = (v3) {0,0,0},
+    .center = (v3) {4.5,3,-1},
     .radius = 1.0f,
     .color = (v3) {1, 0, 0},
   });
 
   add_sphere((Sphere) {
-    .center = (v3) {1.5,0,0},
+    .center = (v3) {3,0,0},
     .radius = 1.0f,
     .color = (v3) {1, 1, 0},
   });
 
   add_box((Box) {
-    .center = (v3) { 1, 0, 0 },
+    .center = (v3) { 4, 0, 0 },
     .half_size = (v3) { 1, 1, 1 },
     .color = (v3) { 0, 0, 1 },
   });
@@ -351,13 +369,11 @@ int main() {
       // Camera mouse control
       pcamera_handle_mouse(&state.camera, state.window);
 
-      m4 mvp = pcamera_calc_mvp(&state.camera);
-      imr_update_mvp(&state.imr, mvp);
-
       imr_clear((v4) { .5f, .5f, .5f, 1.0f });
       imr_begin(&state.imr);
       {
         imr_switch_shader(&state.imr, state.shaders[SHADER_RAYMARCH]);
+
         upload_uniforms();
         upload_geometries();
 
@@ -372,7 +388,28 @@ int main() {
       imr_end(&state.imr);
     }
 
-    // printf("FPS: %d\n", state.fc.fps);
+    // UI Rendering Pass
+    {
+      glViewport(0, 0, state.window.width, state.window.height);
+
+      imr_begin(&state.imr);
+      {
+        imr_switch_shader_to_default(&state.imr);
+
+        m4 mvp = ocamera_calc_mvp(&state.ui_camera);
+        imr_update_mvp(&state.imr, mvp);
+
+        // Render FPS
+        char text[100];
+        snprintf(text, sizeof(text), "FFS: %d", state.fc.fps);
+        font_render(
+          &state.imr, &state.font, text,
+          (v3) { 50, 50, 0 },
+          (v4) { 1, 1, 1, 1 }
+        );
+      }
+      imr_end(&state.imr);
+    }
 
     frame_controller_end(&state.fc);
     window_update(&state.window);
