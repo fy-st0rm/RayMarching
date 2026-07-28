@@ -59,6 +59,37 @@ SceneResult box(vec3 p, Box box) {
   return result;
 }
 
+// :cone 
+struct Cone {
+  vec3 center;
+  float radius;
+  float height;
+  vec3 color;
+};
+uniform Cone cones[MAX_GEOMETRY];
+uniform int cones_count;
+
+float cone_sdf(vec3 p, vec3 center, float radius, float height) {
+  p -= center;
+  float q = length(p.xz);
+  float k = radius / height;
+  float d1 = max(dot(vec2(q, p.y), normalize(vec2(1.0, -k))), p.y - height);
+  float d2 = max(p.y, q - radius);
+
+  if (p.y < 0.0)
+        return d2;
+
+  return d1;
+}
+
+SceneResult cone(vec3 p, Cone cone)
+{
+    SceneResult result;
+    result.distance = cone_sdf(p, cone.center, cone.radius, cone.height);
+    result.color = cone.color;
+    return result;
+}
+
 // Ray marching operations
 SceneResult union_op(SceneResult a, SceneResult b) {
   if (a.distance < b.distance) return a;
@@ -92,6 +123,11 @@ SceneResult scene(vec3 p) {
   // Boxes
   for (int i = 0; i < boxes_count; i++) {
     result = smooth_union(result, box(p, boxes[i]), 0.5);
+  }
+
+  // Cones
+  for (int i = 0; i < cones_count; i++) {
+    result = smooth_union(result, cone(p, cones[i]), 0.5);
   }
 
   return result;
@@ -140,7 +176,7 @@ float soft_shadow(vec3 ro, vec3 rd) {
 
   for(int i = 0; i < 32; i++) {
     float h = scene(ro + rd * t).distance;
-
+    
     if(h < 0.001) return 0.0;
 
     res = min(res, 8.0 * h / t);

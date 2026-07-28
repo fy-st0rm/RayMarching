@@ -33,6 +33,13 @@ typedef struct {
   v3 color;
 } Box;
 
+typedef struct {
+  v3 center;
+  f32 radius;
+  f32 height;
+  v3 color;
+} Cone;
+
 // :state def
 typedef enum {
   LEFT,
@@ -66,6 +73,9 @@ typedef struct {
 
   Box boxes[MAX_GEOMETRY];
   i32 boxes_count;
+
+  Cone cones[MAX_GEOMETRY];
+  i32 cones_count;
 } State;
 
 State state = {0}; // Global state variable
@@ -79,6 +89,7 @@ void add_sphere(Sphere sphere);
 void add_box(Box box);
 void upload_sphere();
 void upload_box();
+void upload_cone();
 void upload_geometries();
 
 // :movement def
@@ -177,6 +188,15 @@ void add_box(Box box) {
   state.boxes[state.boxes_count++] = box;
 }
 
+void add_cone(Cone cone) {
+  panic(
+    state.cones_count + 1 < MAX_GEOMETRY,
+    "Cannot fit any more cones."
+  );
+
+  state.cones[state.cones_count++] = cone;
+}
+
 void upload_sphere() {
   Shader shader = state.shaders[SHADER_RAYMARCH];
 
@@ -255,9 +275,55 @@ void upload_box() {
   GLCall(glUniform1i(loc, state.boxes_count));
 }
 
+void upload_cone() {
+    Shader shader = state.shaders[SHADER_RAYMARCH];
+
+    for (i32 i = 0; i < state.cones_count; i++) {
+        Cone cone = state.cones[i];
+
+        char uniform[64];
+
+        snprintf(uniform, sizeof(uniform), "cones[%d].center", i);
+        GLint loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform3f(
+            loc,
+            cone.center.x,
+            cone.center.y,
+            cone.center.z
+        ));
+
+        snprintf(uniform, sizeof(uniform), "cones[%d].radius", i);
+        loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform1f(
+            loc,
+            cone.radius
+        ));
+
+        snprintf(uniform, sizeof(uniform), "cones[%d].height", i);
+        loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform1f(
+            loc,
+            cone.height
+        ));
+
+        snprintf(uniform, sizeof(uniform), "cones[%d].color", i);
+        loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform3f(
+            loc,
+            cone.color.x,
+            cone.color.y,
+            cone.color.z
+        ));
+    }
+
+    GLint loc = GLCall(glGetUniformLocation(shader, "cones_count"));
+    GLCall(glUniform1i(loc, state.cones_count));
+}
+
 void upload_geometries() {
   upload_sphere();
   upload_box();
+  upload_cone();
 }
 
 
@@ -360,6 +426,13 @@ int main() {
     .center = (v3) { 0, -2, 0 },
     .half_size = (v3) { 50, 0.5, 50 },
     .color = (v3) { 1, 1, 1 },
+  });
+
+  add_cone((Cone) {
+    .center = (v3) { 0, -1.5f, 0 },
+    .radius = 1.0f,
+    .height = 2.0f,
+    .color = (v3) { 1, 0, 0 },
   });
 
   while (!state.window.should_close) {
