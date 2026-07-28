@@ -416,7 +416,7 @@ typedef struct {
 } PCamera_Info;
 
 typedef struct {
-  v3 dir, up, right;
+  v3 forward, up, right;
   v3 pos;
   m4 look_at, mvp;
   f32 pitch, yaw;
@@ -430,7 +430,7 @@ typedef struct {
   PCamera_Info info;
 } PCamera;
 
-PCamera pcamera_new(v3 pos, v3 dir, f32 sensitivity, PCamera_Info info);
+PCamera pcamera_new(v3 pos, v3 forward, f32 sensitivity, PCamera_Info info);
 void pcamera_change_pos(PCamera* cam, v3 dp);
 void pcamera_handle_mouse(PCamera* cam, Window window);
 m4 pcamera_calc_mvp(PCamera* cam);
@@ -1503,17 +1503,19 @@ m4 ocamera_calc_mvp(OCamera* cam) {
 }
 
 // :pcamera impl
-PCamera pcamera_new(v3 pos, v3 dir, f32 sensitivity, PCamera_Info info) {
-  dir = v3_normalize(dir);
+PCamera pcamera_new(v3 pos, v3 forward, f32 sensitivity, PCamera_Info info) {
+  forward = v3_normalize(forward);
   v3 up = { 0.0f, 1.0f, 0.0f };
-  v3 right = v3_cross(dir, up);
+  v3 right = v3_cross(forward, up);
+  f32 pitch = to_degrees(asinf(forward.y));
+  f32 yaw   = to_degrees(atan2f(forward.z, forward.x));
   return (PCamera) {
     .pos = pos,
-    .dir = dir,
+    .forward = forward,
     .up = up,
     .right = right,
-    .pitch = 0.0f,
-    .yaw = -90.0f,
+    .pitch = pitch,
+    .yaw = yaw,
     .mp = (v2) { 0, 0 },
     .sensitivity = sensitivity,
     .first = true,
@@ -1533,6 +1535,7 @@ void pcamera_handle_mouse(PCamera* cam, Window window) {
       GLFW_CURSOR,
       GLFW_CURSOR_NORMAL
     );
+    cam->first = true;
     return;
   }
 
@@ -1543,12 +1546,6 @@ void pcamera_handle_mouse(PCamera* cam, Window window) {
   );
 
   if (cam->first) {
-    event_set_mouse_pos(
-      window, (v2) {
-        window.width / 2.0f,
-        window.height / 2.0f
-      }
-    );
     cam->mp = event_mouse_pos(window);
     cam->first = false;
   }
@@ -1572,12 +1569,12 @@ void pcamera_handle_mouse(PCamera* cam, Window window) {
   front.y = sin(to_radians(cam->pitch));
   front.z = sin(to_radians(cam->yaw)) * cos(to_radians(cam->pitch));
 
-  cam->dir = v3_normalize(front);
+  cam->forward = v3_normalize(front);
   cam->right = v3_normalize(
-    v3_cross(cam->dir, (v3) { 0, 1, 0 })
+    v3_cross(cam->forward, (v3) { 0, 1, 0 })
   );
   cam->up = v3_normalize(
-    v3_cross(cam->right, cam->dir)
+    v3_cross(cam->right, cam->forward)
   );
 
   cam->mp = p;
@@ -1593,10 +1590,10 @@ m4 pcamera_calc_mvp(PCamera* cam) {
 
   m4 camera_mat = {
     .m = {
-      { cam->right.x, cam->right.y, cam->right.z, 0.0f },
-      { cam->up.x   , cam->up.y   , cam->up.z   , 0.0f },
-      { cam->dir.x  , cam->dir.y  , cam->dir.z  , 0.0f },
-      {         0.0f,         0.0f,         0.0f, 1.0f }
+      { cam->right.x  , cam->right.y  , cam->right.z  , 0.0f },
+      { cam->up.x     , cam->up.y     , cam->up.z     , 0.0f },
+      { cam->forward.x, cam->forward.y, cam->forward.z, 0.0f },
+      {           0.0f,           0.0f,           0.0f, 1.0f }
     }
   };
 
