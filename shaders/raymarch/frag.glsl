@@ -8,14 +8,16 @@ uniform vec3 u_camera_forward;
 uniform vec3 u_camera_right;
 uniform vec3 u_camera_up;
 
+// Config
+#define MAX_ITERATION 100
+#define MAX_GEOMETRY 32
+
 struct SceneResult {
   float distance;
   vec3 color;
 };
 
 // Geometries
-#define MAX_GEOMETRY 32
-
 // :sphere
 struct Sphere {
   vec3 center;
@@ -103,7 +105,7 @@ SceneResult ray_march(vec3 ray_origin, vec3 ray_direction) {
 
   float travel = 0.0;
 
-  for (int i = 0; i < 60; i++) {
+  for (int i = 0; i < MAX_ITERATION; i++) {
     vec3 samplePoint = ray_origin + ray_direction * travel;
 
     SceneResult result = scene(samplePoint);

@@ -356,6 +356,12 @@ int main() {
     .color = (v3) { 0, 0, 1 },
   });
 
+  add_box((Box) {
+    .center = (v3) { 0, -2, 0 },
+    .half_size = (v3) { 50, 0.5, 50 },
+    .color = (v3) { 1, 1, 1 },
+  });
+
   while (!state.window.should_close) {
     frame_controller_start(&state.fc);
 
