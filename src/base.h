@@ -13,6 +13,7 @@
 #include "external/glfw/include/GLFW/glfw3.h"
 #include "external/stb/stb_image.h"
 #include "external/stb/stb_truetype.h"
+#include "external/microui/microui.h"
 
 // :log
 #if defined(__clang__) || defined(__gcc__)
@@ -464,6 +465,7 @@ u32 shader_compile(ShaderType type, const char* shader_src);
 // :fbo def
 typedef struct {
   u32 id;
+  u32 width, height;
   Texture color_texture;
 } FBO;
 
@@ -1657,8 +1659,8 @@ Texture texture_from_data(u32 width, u32 height, u32* data) {
   GLCall(glBindTexture(GL_TEXTURE_2D, id));
   
   // Setting up some basic modes to display texture
-  GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-  GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+  GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+  GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
   GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
   GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
   
@@ -1777,6 +1779,8 @@ FBO fbo_new(u32 width, u32 height) {
 
   return (FBO) {
     .id = id,
+    .width = width,
+    .height = height,
     .color_texture = color_texture,
   };
 }
@@ -2361,6 +2365,8 @@ void font_delete(Font* font) {
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "external/stb/stb_truetype.h"
+
+#include "external/microui/microui.c"
 
 #endif // BASE_IMPLEMENTATION
 

@@ -9,7 +9,7 @@ uniform vec3 u_camera_right;
 uniform vec3 u_camera_up;
 
 // Config
-#define MAX_ITERATION 100
+#define MAX_ITERATION 200
 #define MAX_GEOMETRY 32
 
 struct SceneResult {
@@ -69,23 +69,39 @@ struct Cone {
 uniform Cone cones[MAX_GEOMETRY];
 uniform int cones_count;
 
-float cone_sdf(vec3 p, vec3 center, float radius, float height) {
-  p -= center;
-  float q = length(p.xz);
-  float k = radius / height;
-  float d1 = max(dot(vec2(q, p.y), normalize(vec2(1.0, -k))), p.y - height);
-  float d2 = max(p.y, q - radius);
+float cone_sdf(vec3 p, vec3 center, float radius, float height)
+{
+    p -= center;
 
-  if (p.y < 0.0)
-        return d2;
+    // Cone centered at center
+    p.y += height * 0.5;
 
-  return d1;
+    vec2 q = vec2(length(p.xz), p.y);
+
+    vec2 c = vec2(radius, height);
+
+    vec2 w = q - vec2(0.0, height);
+
+    vec2 a = w - c * clamp(dot(w, c) / dot(c, c), 0.0, 1.0);
+    vec2 b = w - c * vec2(clamp(w.x / c.x, 0.0, 1.0), 1.0);
+
+    float k = sign(c.y);
+    float d = min(dot(a,a), dot(b,b));
+
+    float s = max(k*(q.x*c.y-q.y*c.x),k*(q.y-c.y));
+
+    return sqrt(d) * sign(s);
 }
 
 SceneResult cone(vec3 p, Cone cone)
 {
     SceneResult result;
-    result.distance = cone_sdf(p, cone.center, cone.radius, cone.height);
+    result.distance = cone_sdf(
+        p,
+        cone.center,
+        cone.height,
+        cone.radius
+    );
     result.color = cone.color;
     return result;
 }

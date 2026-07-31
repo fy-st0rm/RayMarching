@@ -12,7 +12,8 @@ char* controls_text =
   "WASD    - Movement\n"
   "L-SHIFT - Go Down\n"
   "SPACE   - Go Up\n"
-  "ESC     - Toggle Mouse\n";
+  "ESC     - Toggle Mouse\n"
+  "h       - Close help";
 
 // :assets def
 typedef enum {
@@ -57,8 +58,10 @@ typedef struct {
   FrameController fc;
   PCamera camera;
   OCamera ui_camera;
+  FBO rendered_frame;
 
   Font font;
+  b8 help;
 
   // Shaders
   Shader shaders[TOTAL_SHADERS];
@@ -98,7 +101,7 @@ void movement_update();
 
 // :state impl
 void state_init() {
-  state.window = window_new("Game8", 800, 800, true);
+  state.window = window_new("Game8", 800, 600, false);
   state.imr = imr_new();
   state.fc = frame_controller_new(FPS);
   state.camera = pcamera_new(
@@ -125,12 +128,16 @@ void state_init() {
     }
   );
 
-  state.font = font_new("font.otf", 32);
+  state.rendered_frame = fbo_new(state.window.width / 2, state.window.height / 2);
+
+  state.font = font_new("font.otf", 16);
+  state.help = false;
 
   load_shaders();
 }
 
 void state_clean() {
+  fbo_delete(&state.rendered_frame);
   font_delete(&state.font);
   imr_delete(&state.imr);
   window_delete(state.window);
@@ -146,7 +153,7 @@ void load_shaders() {
 void upload_uniforms() {
   {
     int loc = GLCall(glGetUniformLocation(state.shaders[SHADER_RAYMARCH], "u_resolution"));
-    GLCall(glUniform2f(loc, (f32) state.window.width, (f32) state.window.height));
+    GLCall(glUniform2f(loc, (f32) state.rendered_frame.width, (f32) state.rendered_frame.height));
   }
 
   {
@@ -422,18 +429,22 @@ int main() {
     .color = (v3) { 0, 0, 1 },
   });
 
+  // Platform
   add_box((Box) {
     .center = (v3) { 0, -2, 0 },
     .half_size = (v3) { 50, 0.5, 50 },
     .color = (v3) { 1, 1, 1 },
   });
 
-  add_cone((Cone) {
-    .center = (v3) { 0, -1.5f, 0 },
-    .radius = 1.0f,
-    .height = 2.0f,
-    .color = (v3) { 1, 0, 0 },
-  });
+  // add_cone((Cone) {
+  //   .center = (v3) { 0, 1.5f, 0 },
+  //   .radius = 1.0f,
+  //   .height = 2.0f,
+  //   .color = (v3) { 1, 0, 0 },
+  // });
+
+  mu_Context ui;
+  mu_init(&ui);
 
   while (!state.window.should_close) {
     frame_controller_start(&state.fc);
@@ -442,6 +453,13 @@ int main() {
     Event event = {0};
     while (event_poll(state.window, &event)) {
       movement_event(event);
+      if (event.type == KEYDOWN) {
+        switch (event.e.key) {
+          case GLFW_KEY_H: {
+            state.help = (state.help) ? false : true;
+          } break;
+        }
+      }
     }
 
     // Camera movement
@@ -449,7 +467,8 @@ int main() {
 
     // Rendering pass
     {
-      glViewport(0, 0, state.window.width, state.window.height);
+      fbo_bind(&state.rendered_frame);
+      glViewport(0, 0, state.rendered_frame.width, state.rendered_frame.height);
 
       // Camera mouse control
       pcamera_handle_mouse(&state.camera, state.window);
@@ -471,6 +490,8 @@ int main() {
         );
       }
       imr_end(&state.imr);
+
+      fbo_unbind();
     }
 
     // UI Rendering Pass
@@ -484,21 +505,43 @@ int main() {
         m4 mvp = ocamera_calc_mvp(&state.ui_camera);
         imr_update_mvp(&state.imr, mvp);
 
+        texture_bind(state.rendered_frame.color_texture);
+
+        // Render the frame
+        imr_push_quad_tex(
+          &state.imr,
+          (v3) { 0, 0, 0 },
+          (v2) { state.window.width, state.window.height },
+          (Rect) { 0, 1, 1, -1 },
+          state.rendered_frame.color_texture.id,
+          m4_identity(),
+          (v4) { 1, 1, 1, 1 }
+        );
+
+
         // Render FPS
         char text[100];
         snprintf(text, sizeof(text), "FFS: %d", state.fc.fps);
         font_render(
           &state.imr, &state.font, text,
-          (v3) { 50, 50, 0 },
+          (v3) { 30, 30, 0 },
           (v4) { 1, 1, 1, 1 }
         );
 
         // Render Controls
-        font_render(
-          &state.imr, &state.font, controls_text,
-          (v3) { state.window.width - 400, 50, 0 },
-          (v4) { 1, 1, 1, 1 }
-        );
+        if (state.help) {
+          font_render(
+            &state.imr, &state.font, controls_text,
+            (v3) { state.window.width - 200, 30, 0 },
+            (v4) { 1, 1, 1, 1 }
+          );
+        } else {
+          font_render(
+            &state.imr, &state.font, "Press [h] for Help",
+            (v3) { state.window.width - 200, 30, 0 },
+            (v4) { 1, 1, 1, 1 }
+          );
+        }
       }
       imr_end(&state.imr);
     }
