@@ -13,12 +13,93 @@ extern Context* ctx;
 #define BUTTON_ENABLE_COLOR  ((v4) { 0.2, 0.2, 0.2, 1 })
 #define BUTTON_DISABLE_COLOR ((v4) { 0.5, 0.5, 0.5, 1 })
 
-char* controls_text = 
-  "WASD    - Movement\n"
-  "L-SHIFT - Go Down\n"
-  "SPACE   - Go Up\n"
-  "ESC     - Toggle Mouse\n"
-  "h       - Close help";
+#define SPAWN_GEOMETRY_PANNEL_SIZE ((v2) { 200, 300 })
+#define GEOMETRY_DATA_PANNEL_SIZE  ((v2) { 500, 200 })
+#define GEOMETRY_HELP_PANNEL_SIZE  ((v2) { 400, 200 })
+#define GEOMETRY_COLOR_PANNEL_SIZE  ((v2) { 400, 200 })
+
+#define PALETTE_SIZE 64
+static v4 PALETTE[PALETTE_SIZE] = {
+  // Grayscale
+  {0.000f, 0.000f, 0.000f, 1.0f},
+  {0.133f, 0.125f, 0.204f, 1.0f},
+  {0.263f, 0.263f, 0.310f, 1.0f},
+  {0.412f, 0.416f, 0.416f, 1.0f},
+  {0.545f, 0.549f, 0.561f, 1.0f},
+  {0.710f, 0.710f, 0.710f, 1.0f},
+  {0.851f, 0.851f, 0.851f, 1.0f},
+  {1.000f, 1.000f, 1.000f, 1.0f},
+
+  // Reds
+  {0.247f, 0.000f, 0.000f, 1.0f},
+  {0.498f, 0.000f, 0.000f, 1.0f},
+  {0.749f, 0.000f, 0.000f, 1.0f},
+  {1.000f, 0.000f, 0.000f, 1.0f},
+  {1.000f, 0.333f, 0.333f, 1.0f},
+  {1.000f, 0.533f, 0.533f, 1.0f},
+  {1.000f, 0.733f, 0.733f, 1.0f},
+  {1.000f, 0.878f, 0.878f, 1.0f},
+
+  // Oranges / Browns
+  {0.290f, 0.165f, 0.000f, 1.0f},
+  {0.478f, 0.247f, 0.000f, 1.0f},
+  {0.651f, 0.353f, 0.000f, 1.0f},
+  {0.851f, 0.478f, 0.000f, 1.0f},
+  {1.000f, 0.647f, 0.000f, 1.0f},
+  {1.000f, 0.749f, 0.400f, 1.0f},
+  {1.000f, 0.847f, 0.659f, 1.0f},
+  {1.000f, 0.941f, 0.839f, 1.0f},
+
+  // Yellows
+  {0.302f, 0.302f, 0.000f, 1.0f},
+  {0.502f, 0.502f, 0.000f, 1.0f},
+  {0.702f, 0.702f, 0.000f, 1.0f},
+  {1.000f, 1.000f, 0.000f, 1.0f},
+  {1.000f, 1.000f, 0.400f, 1.0f},
+  {1.000f, 1.000f, 0.600f, 1.0f},
+  {1.000f, 1.000f, 0.800f, 1.0f},
+  {1.000f, 1.000f, 0.941f, 1.0f},
+
+  // Greens
+  {0.000f, 0.200f, 0.000f, 1.0f},
+  {0.000f, 0.400f, 0.000f, 1.0f},
+  {0.000f, 0.600f, 0.200f, 1.0f},
+  {0.000f, 0.800f, 0.000f, 1.0f},
+  {0.000f, 1.000f, 0.000f, 1.0f},
+  {0.400f, 1.000f, 0.400f, 1.0f},
+  {0.667f, 1.000f, 0.667f, 1.0f},
+  {0.878f, 1.000f, 0.878f, 1.0f},
+
+  // Cyans
+  {0.000f, 0.200f, 0.200f, 1.0f},
+  {0.000f, 0.400f, 0.400f, 1.0f},
+  {0.000f, 0.600f, 0.600f, 1.0f},
+  {0.000f, 0.800f, 0.800f, 1.0f},
+  {0.000f, 1.000f, 1.000f, 1.0f},
+  {0.400f, 1.000f, 1.000f, 1.0f},
+  {0.667f, 1.000f, 1.000f, 1.0f},
+  {0.878f, 1.000f, 1.000f, 1.0f},
+
+  // Blues
+  {0.000f, 0.122f, 0.302f, 1.0f},
+  {0.000f, 0.247f, 0.498f, 1.0f},
+  {0.000f, 0.333f, 0.800f, 1.0f},
+  {0.000f, 0.502f, 1.000f, 1.0f},
+  {0.200f, 0.600f, 1.000f, 1.0f},
+  {0.400f, 0.698f, 1.000f, 1.0f},
+  {0.600f, 0.800f, 1.000f, 1.0f},
+  {0.867f, 0.933f, 1.000f, 1.0f},
+
+  // Purples / Magentas
+  {0.200f, 0.000f, 0.200f, 1.0f},
+  {0.400f, 0.000f, 0.400f, 1.0f},
+  {0.600f, 0.000f, 0.600f, 1.0f},
+  {0.800f, 0.000f, 0.800f, 1.0f},
+  {1.000f, 0.000f, 1.000f, 1.0f},
+  {1.000f, 0.400f, 1.000f, 1.0f},
+  {1.000f, 0.667f, 1.000f, 1.0f},
+  {1.000f, 0.878f, 1.000f, 1.0f},
+};
 
 // :common def
 typedef enum {
@@ -71,7 +152,10 @@ typedef enum {
   CON_CAMERA,
   CON_GEOMETRY,
   CON_SPAWN,
+  CON_TOTAL,
 } ControlType;
+
+char* control_type_name(ControlType type);
 
 typedef struct {
   Window window;
@@ -86,6 +170,7 @@ typedef struct {
 
   // Event
   b8 mouse_clicked;
+  b8 rshift_hold;
 
   // Shaders
   Shader shaders[TOTAL_SHADERS];
@@ -93,6 +178,7 @@ typedef struct {
 
   // Movement
   b8 movement[TOTAL_DIR];
+  b8 size[TOTAL_DIR];
 
   // Scene
   Geometry geometries[MAX_GEOMETRY];
@@ -100,7 +186,9 @@ typedef struct {
 
   // Control
   ControlType current_control;
-  i32 selected_geo;
+  i32 selected_geo_id;
+  Geometry* selected_geo;
+  v4 selected_color;
 } State;
 
 State state = {0}; // Global state variable
@@ -122,15 +210,20 @@ void state_render();
 
 // :ui def
 b8 button(const char* label, Rect rect);
+b8 color_selector(Rect rect, v4* selected_color);
 void pannel_spawn_geometry();
+void pannel_geometry_data();
+void pannel_geometry_help();
+void pannel_geometry_color();
 
 // :editor def
-void editor_geometry_movement_event(Event event);
-void editor_camera_movement_event(Event event);
+void editor_movement_event(Event event);
 void editor_camera_movement_update();
+void editor_geometry_movement_update();
 
 // :geometry impl
 char* geometry_name(GeometryType type) {
+  STATIC_ASSERT(GEO_TOTAL == 3, "Update here!");
   switch (type) {
     case GEO_SPHERE: return "Sphere";
     case GEO_BOX: return "Box";
@@ -149,6 +242,16 @@ void resource_load() {
 }
 
 // :state impl
+char* control_type_name(ControlType type) {
+  STATIC_ASSERT(CON_TOTAL == 3, "Update here!");
+  switch (type) {
+    case CON_CAMERA: return "Camera";
+    case CON_GEOMETRY: return "Geometry";
+    case CON_SPAWN: return "Spawn";
+    default: panic(0, "Unexpected type: %d", type);
+  }
+}
+
 void state_init() {
   state.window = window_new("Game8", 800, 600, true);
   state.imr = imr_new();
@@ -185,6 +288,7 @@ void state_init() {
   state.help = false;
   state.current_control = CON_CAMERA;
   state.camera.mouse_enable = true;
+  state.selected_color = (v4) {1, 1, 1, 1};
 
   resource_load();
 }
@@ -208,6 +312,7 @@ void state_add_geometry(GeometryType type) {
     .center = (v3) { 0, 0, 0 },
   };
 
+  STATIC_ASSERT(GEO_TOTAL == 3, "Update here!");
   switch (type) {
     case GEO_SPHERE: {
       geo.sphere.radius = 1.0f;
@@ -300,6 +405,7 @@ void state_upload_geometries() {
       geo.color.z
     ));
 
+    STATIC_ASSERT(GEO_TOTAL == 3, "Update here!");
     switch (geo.type) {
       case GEO_SPHERE: {
         snprintf(uniform, sizeof(uniform), "geometries[%d].data", i);
@@ -373,13 +479,21 @@ void state_handle_control(Event event) {
         ) {
           state.camera.mouse_enable = true;
           state.current_control = CON_CAMERA;
+          state.selected_geo_id = GEO_NONE;
+          state.selected_geo = NULL;
+          state.selected_color = (v4){1};
         }
+      } break;
+
+      case GLFW_KEY_RIGHT_SHIFT: {
+        state.rshift_hold = true;
       } break;
 
       case GLFW_KEY_DELETE: {
         if (state.current_control == CON_GEOMETRY) {
-          state_delete_geometry(state.selected_geo);
-          state.selected_geo = GEO_NONE;
+          state_delete_geometry(state.selected_geo_id);
+          state.selected_geo_id = GEO_NONE;
+          state.selected_geo = NULL;
           state.current_control = CON_CAMERA;
           state.camera.mouse_enable = true;
         }
@@ -393,18 +507,35 @@ void state_handle_control(Event event) {
       } break;
     }
   }
+  else if (event.type == KEYUP) {
+    switch (event.e.key) {
+      case GLFW_KEY_RIGHT_SHIFT: {
+        state.rshift_hold = false;
+      } break;
+    }
+  }
   else if (event.type == MOUSE_BUTTON_DOWN) {
     switch (event.e.button) {
       case MOUSE_BUTTON_LEFT: {
-        state.mouse_clicked = true;
-
         if (state.current_control == CON_CAMERA) {
           i32 geo = state_select_geometry();
           if (geo > 0) {
             state.current_control = CON_GEOMETRY;
-            state.selected_geo = geo;
+            state.selected_geo_id = geo;
             state.camera.mouse_enable = false;
+
+            state.selected_geo = state_get_geometry(geo);
+            panic(state.selected_geo, "Selected Geometry is NULL");
+
+            state.selected_color = (v4) {
+              state.selected_geo->color.x,
+              state.selected_geo->color.y,
+              state.selected_geo->color.z,
+              1
+            };
           }
+        } else {
+          state.mouse_clicked = true;
         }
       } break;
     }
@@ -417,22 +548,20 @@ void state_handle_control(Event event) {
     }
   }
 
-  switch (state.current_control) {
-    case CON_CAMERA:
-      editor_camera_movement_event(event);
-      break;
-    case CON_GEOMETRY:
-      editor_geometry_movement_event(event);
-      break;
-  }
+  editor_movement_event(event);
 }
 
 void state_update() {
   // Camera control using mouse
   pcamera_handle_mouse(&state.camera, state.window);
 
-  if (state.current_control == CON_CAMERA) {
-    editor_camera_movement_update();
+  switch (state.current_control) {
+    case CON_CAMERA:
+      editor_camera_movement_update();
+      break;
+    case CON_GEOMETRY:
+      editor_geometry_movement_update();
+      break;
   }
 }
 
@@ -464,8 +593,15 @@ void state_raymarch_pass() {
 }
 
 void state_ui_pass() {
-  if (state.current_control == CON_SPAWN) {
-    pannel_spawn_geometry();
+  switch (state.current_control) {
+    case CON_SPAWN:
+      pannel_spawn_geometry();
+      break;
+    case CON_GEOMETRY:
+      pannel_geometry_data();
+      pannel_geometry_help();
+      pannel_geometry_color();
+      break;
   }
 
   // Render crosshair
@@ -479,23 +615,42 @@ void state_ui_pass() {
     },
     crosshair_size,
     m4_identity(),
-    (v4) { 0, 1, 0, 1 }
-  );
-
-  // Render FPS
-  char text[100];
-  snprintf(text, sizeof(text), "FFS: %d", state.fc.fps);
-  font_render(
-    &state.imr, &state.font, text,
-    (v3) { 30, 30, 0 },
     (v4) { 1, 1, 1, 1 }
   );
 
-  // Render Controls
+  // Render FPS
+  {
+    char text[100];
+    snprintf(text, sizeof(text), "FFS: %d", state.fc.fps);
+    font_render(
+      &state.imr, &state.font, text,
+      (v3) { 30, 30, 0 },
+      (v4) { 1, 1, 1, 1 }
+    );
+  }
+
+  // Render mode
+  {
+    char text[100];
+    snprintf(text, sizeof(text), "Mode: %s", control_type_name(state.current_control));
+    font_render(
+      &state.imr, &state.font, text,
+      (v3) { 30, 70, 0 },
+      (v4) { 1, 1, 1, 1 }
+    );
+  }
+
+  // Render Help Controls
   if (state.help) {
+    char* controls_text = 
+      "WASD        - Movement\n"
+      "L-SHIFT     - Go Down\n"
+      "SPACE       - Go Up\n"
+      "G           - Spawn Geometry Mode\n"
+      "[Click Obj] - Edit Geometry Mode";
     font_render(
       &state.imr, &state.font, controls_text,
-      (v3) { state.window.width - 200, 30, 0 },
+      (v3) { state.window.width - 400, 30, 0 },
       (v4) { 1, 1, 1, 1 }
     );
   } else {
@@ -567,9 +722,42 @@ b8 button(const char* label, Rect rect) {
   return (state.mouse_clicked && point_in_rect(mouse, rect));
 }
 
+b8 color_selector(Rect rect, v4* selected_color) {
+  i32 palette_cols = 8;
+  i32 palette_rows = 8;
+  f32 cell_spacing = 1.0f;
+  b8 selected = false;
+
+  for (i32 i = 0; i < PALETTE_SIZE; i++) {
+    i32 row = i / palette_cols;
+    i32 col = i % palette_cols;
+
+    f32 x = rect.x + col * (rect.w + cell_spacing);
+    f32 y = rect.y + row * (rect.h + cell_spacing);
+
+    if (state.mouse_clicked) {
+      v2 mouse = event_mouse_pos(state.window);
+      if (point_in_rect(mouse, (Rect) {x, y, rect.w, rect.h})) {
+        *selected_color = PALETTE[i];
+        selected = true;
+      }
+    }
+
+    imr_push_quad(
+      &state.imr,
+      (v3){x, y, 1},
+      (v2){rect.w, rect.h},
+      m4_identity(),
+      PALETTE[i]
+    );
+  }
+
+  return selected;
+}
+
 void pannel_spawn_geometry() {
   f32 gap = 10.0f;
-  v2 pannel_size = { 200, 300 };
+  v2 pannel_size = SPAWN_GEOMETRY_PANNEL_SIZE;
   v3 pannel_pos = {
     state.window.width - pannel_size.x - gap,
     state.window.height - pannel_size.y - gap,
@@ -619,38 +807,242 @@ void pannel_spawn_geometry() {
   }
 }
 
-// :editor impl
-void editor_geometry_movement_event(Event event) {
-  panic(state.selected_geo > 0, "Selected Geometry ID is 0");
-
-  Geometry* geo = state_get_geometry(state.selected_geo);
+void pannel_geometry_data() {
+  Geometry* geo = state.selected_geo;
   panic(geo, "Selected Geometry is NULL");
 
-  if (event.type == KEYDOWN) {
-    switch (event.e.key) {
-      case GLFW_KEY_W:
-        geo->center.z += SPEED * state.fc.dt;
-        break;
-      case GLFW_KEY_A:
-        geo->center.x += SPEED * state.fc.dt;
-        break;
-      case GLFW_KEY_S:
-        geo->center.z -= SPEED * state.fc.dt;
-        break;
-      case GLFW_KEY_D:
-        geo->center.x -= SPEED * state.fc.dt;
-        break;
-      case GLFW_KEY_SPACE:
-        geo->center.y += SPEED * state.fc.dt;
-        break;
-      case GLFW_KEY_LEFT_SHIFT:
-        geo->center.y -= SPEED * state.fc.dt;
-        break;
-    }
+  f32 gap = 10.0f;
+  v2 pannel_size = GEOMETRY_DATA_PANNEL_SIZE;
+  v3 pannel_pos = {
+    state.window.width / 2.0f - pannel_size.x / 2.0f,
+    state.window.height - pannel_size.y - gap,
+    1
+  };
+
+  // Render pannel
+  imr_push_quad(
+    &state.imr,
+    pannel_pos,
+    pannel_size,
+    m4_identity(),
+    (v4) { 0.5, 0.5, 0.5, 0.5 }
+  );
+
+  // Label starting pos
+  f32 label_gap = 15;
+  char* tmp_text = "A";
+  v2 label_size = font_calc_size(&state.font, tmp_text);
+  f32 x = pannel_pos.x + label_gap;
+  f32 y = pannel_pos.y + label_size.y + label_gap;
+
+  // Render id
+  {
+    char text[100];
+    snprintf(
+      text, sizeof(text),
+      "Id        : %d",
+      geo->id
+    );
+    font_render(
+      &state.imr,
+      &state.font,
+      text,
+      (v3) { x, y, 1 },
+      (v4) { 1, 1, 1, 1 }
+    );
+    y += label_size.y + label_gap;
+  }
+
+  // Render position
+  {
+    char text[100];
+    snprintf(
+      text, sizeof(text),
+      "Pos       : (%.2f, %.2f, %.2f)",
+      geo->center.x, geo->center.y, geo->center.z
+    );
+    font_render(
+      &state.imr,
+      &state.font,
+      text,
+      (v3) { x, y, 1 },
+      (v4) { 1, 1, 1, 1 }
+    );
+    y += label_size.y + label_gap;
+  }
+
+  // Render color
+  {
+    char text[100];
+    snprintf(
+      text, sizeof(text),
+      "Color     : (%.2f, %.2f, %.2f) ",
+      geo->color.x, geo->color.y, geo->color.z
+    );
+    v2 size = font_calc_size(&state.font, text);
+    font_render(
+      &state.imr,
+      &state.font,
+      text,
+      (v3) { x, y, 1 },
+      (v4) { 1, 1, 1, 1 }
+    );
+    imr_push_quad(
+      &state.imr,
+      (v3) { x + size.x, y - label_size.y, 1 },
+      (v2) { label_size.y, label_size.y },
+      m4_identity(),
+      (v4) { geo->color.x, geo->color.y, geo->color.z, 1 }
+    );
+    y += label_size.y + label_gap;
+  }
+
+  // Render based on type
+  switch (geo->type) {
+    case GEO_SPHERE: {
+      char text[100];
+      snprintf(
+        text, sizeof(text),
+        "Radius    : %.2f", geo->sphere.radius
+      );
+      font_render(
+        &state.imr,
+        &state.font,
+        text,
+        (v3) { x, y, 1 },
+        (v4) { 1, 1, 1, 1 }
+      );
+      y += label_size.y + label_gap;
+    } break;
+
+    case GEO_BOX: {
+      char text[100];
+      snprintf(
+        text, sizeof(text),
+        "Half Size : (%.2f, %.2f, %.2f)",
+        geo->box.half_size.x, geo->box.half_size.y, geo->box.half_size.z
+      );
+      font_render(
+        &state.imr,
+        &state.font,
+        text,
+        (v3) { x, y, 1 },
+        (v4) { 1, 1, 1, 1 }
+      );
+      y += label_size.y + label_gap;
+    } break;
   }
 }
 
-void editor_camera_movement_event(Event event) {
+void pannel_geometry_help() {
+  f32 gap = 10.0f;
+  v2 pannel_size = GEOMETRY_HELP_PANNEL_SIZE;
+  v3 pannel_pos = {
+    state.window.width / 2.0f -
+    GEOMETRY_DATA_PANNEL_SIZE.x / 2.0f -
+    pannel_size.x - gap,
+    state.window.height - pannel_size.y - gap,
+    1
+  };
+
+  // Render pannel
+  imr_push_quad(
+    &state.imr,
+    pannel_pos,
+    pannel_size,
+    m4_identity(),
+    (v4) { 0.5, 0.5, 0.5, 0.5 }
+  );
+
+  // Render help text
+  const char* text =
+    "A-D              - X movement\n"
+    "W-S              - Z movement\n"
+    "SPACE-LSHIFT     - Y movement\n"
+    "[UP Arrow]       - Y size increment\n"
+    "[DOWN Arrow]     - Z size increment\n"
+    "[RIGHT Arrow]    - X size increment\n"
+    "RSHIFT + [Arrow] - size decrement\n"
+  ;
+
+  v2 label_size = font_calc_size(&state.font, text);
+  font_render(
+    &state.imr,
+    &state.font,
+    text,
+    (v3) {
+      pannel_pos.x + 15.0f,
+      pannel_pos.y + label_size.y + 15.0f,
+      1.0f
+    },
+    (v4) { 1, 1, 1, 1 }
+  );
+}
+
+void pannel_geometry_color() {
+  f32 gap = 10.0f;
+  v2 pannel_size = GEOMETRY_COLOR_PANNEL_SIZE;
+  v3 pannel_pos = {
+    state.window.width / 2.0f +
+    GEOMETRY_DATA_PANNEL_SIZE.x / 2.0f + gap,
+    state.window.height - pannel_size.y - gap,
+    1
+  };
+
+  // Render pannel
+  imr_push_quad(
+    &state.imr,
+    pannel_pos,
+    pannel_size,
+    m4_identity(),
+    (v4) { 0.5, 0.5, 0.5, 0.5 }
+  );
+
+  f32 item_gap = 15.0f;
+  f32 cell_size = 20.0f;
+  v2 pos = { pannel_pos.x + item_gap, pannel_pos.y + item_gap };
+
+  // Change the color of geometry
+  if (color_selector((Rect) {
+    pos.x, pos.y, cell_size, cell_size
+  }, &state.selected_color)) {
+    state.selected_geo->color = (v3) {
+      state.selected_color.r,
+      state.selected_color.g,
+      state.selected_color.b
+    };
+  }
+
+  f32 right_start_x = pos.x + 8 + 20 * 8 + 2 * item_gap;
+
+  // Render RGB Values
+  char text[100];
+  snprintf(
+    text, sizeof(text),
+    "R: %.2f\nG: %.2f\nB: %.2f",
+    state.selected_color.x, state.selected_color.y, state.selected_color.z
+  );
+  v2 size = font_calc_size(&state.font, text);
+  font_render(
+    &state.imr,
+    &state.font,
+    text,
+    (v3) { right_start_x, pos.y + item_gap, 1 },
+    (v4) { 1, 1, 1, 1 }
+  );
+
+  // Render selected color
+  imr_push_quad(
+    &state.imr,
+    (v3) { right_start_x, pos.y + size.y * 5 + item_gap, 1 },
+    (v2) { 65, 65 },
+    m4_identity(),
+    state.selected_color
+  );
+}
+
+// :editor impl
+void editor_movement_event(Event event) {
   if (event.type == KEYDOWN) {
     switch (event.e.key) {
       case GLFW_KEY_W:
@@ -670,6 +1062,15 @@ void editor_camera_movement_event(Event event) {
         break;
       case GLFW_KEY_LEFT_SHIFT:
         state.movement[DOWN] = true;
+        break;
+      case GLFW_KEY_UP:
+        state.size[UP] = true;
+        break;
+      case GLFW_KEY_DOWN:
+        state.size[DOWN] = true;
+        break;
+      case GLFW_KEY_RIGHT:
+        state.size[RIGHT] = true;
         break;
     }
   }
@@ -693,6 +1094,15 @@ void editor_camera_movement_event(Event event) {
       case GLFW_KEY_LEFT_SHIFT:
         state.movement[DOWN] = false;
         break;
+      case GLFW_KEY_UP:
+        state.size[UP] = false;
+        break;
+      case GLFW_KEY_DOWN:
+        state.size[DOWN] = false;
+        break;
+      case GLFW_KEY_RIGHT:
+        state.size[RIGHT] = false;
+        break;
     }
   }
 }
@@ -715,6 +1125,73 @@ void editor_camera_movement_update() {
   }
   if (state.movement[DOWN]) {
     pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.up, -SPEED * state.fc.dt));
+  }
+}
+
+void editor_geometry_movement_update() {
+  Geometry* geo = state.selected_geo;
+  panic(geo, "Selected Geometry is NULL");
+
+  // Movement
+  if (state.movement[FRONT]) {
+    geo->center.z += SPEED * state.fc.dt;
+  }
+  if (state.movement[BACK]) {
+    geo->center.z -= SPEED * state.fc.dt;
+  }
+  if (state.movement[LEFT]) {
+    geo->center.x += SPEED * state.fc.dt;
+  }
+  if (state.movement[RIGHT]) {
+    geo->center.x -= SPEED * state.fc.dt;
+  }
+  if (state.movement[UP]) {
+    geo->center.y += SPEED * state.fc.dt;
+  }
+  if (state.movement[DOWN]) {
+    geo->center.y -= SPEED * state.fc.dt;
+  }
+
+  // Scaling
+  STATIC_ASSERT(GEO_TOTAL == 3, "Update here!");
+  switch (geo->type) {
+    case GEO_SPHERE: {
+      if (
+        state.size[UP] ||
+        state.size[DOWN] ||
+        state.size[RIGHT]
+      ) {
+        if (state.rshift_hold) {
+          geo->sphere.radius -= 0.1f;
+        } else {
+          geo->sphere.radius += 0.1f;
+        }
+      }
+    } break;
+
+    case GEO_BOX: {
+      if (state.size[UP]) {
+        if (state.rshift_hold) {
+          geo->box.half_size.y -= 0.1f;
+        } else {
+          geo->box.half_size.y += 0.1f;
+        }
+      }
+      if (state.size[DOWN]) {
+        if (state.rshift_hold) {
+          geo->box.half_size.z -= 0.1f;
+        } else {
+          geo->box.half_size.z += 0.1f;
+        }
+      }
+      if (state.size[RIGHT]) {
+        if (state.rshift_hold) {
+          geo->box.half_size.x -= 0.1f;
+        } else {
+          geo->box.half_size.x += 0.1f;
+        }
+      }
+    } break;
   }
 }
 
@@ -749,7 +1226,7 @@ int main() {
     frame_controller_end(&state.fc);
     window_update(&state.window);
 
-    // Reset the mouse clicked at the end of frame
+    // Reset the clicked events at the end of frame
     state.mouse_clicked = false;
   }
 

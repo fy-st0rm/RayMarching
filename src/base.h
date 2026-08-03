@@ -2375,7 +2375,7 @@ v2 font_calc_size(Font* font, const char* text) {
   for (const char* c = text; *c; c++) {
     Glyph g = font->glyphs[(i32)*c];
     size.x += g.advance;
-    size.y = g.size.y;
+    if (size.y < g.size.y) size.y = g.size.y;
   }
 
   return size;
