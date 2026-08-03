@@ -467,6 +467,7 @@ typedef struct {
   u32 id;
   u32 width, height;
   Texture color_texture;
+  Texture temp_texture;
 } FBO;
 
 FBO fbo_new(u32 width, u32 height);
@@ -1765,9 +1766,16 @@ FBO fbo_new(u32 width, u32 height) {
     GL_TEXTURE_2D, color_texture.id, 0
   ));
 
+  // Temp texture
+  Texture temp_texture = texture_from_data(width, height, NULL);
+  GLCall(glFramebufferTexture2D(
+    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1,
+    GL_TEXTURE_2D, temp_texture.id, 0
+  ));
+
   // Setting up draw buffers
-  GLuint attachments[1] = { GL_COLOR_ATTACHMENT0 };
-  GLCall(glDrawBuffers(1, attachments));
+  GLuint attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+  GLCall(glDrawBuffers(2, attachments));
 
   GLCall(glBindTexture(GL_TEXTURE_2D, 0));
   GLCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
@@ -1782,6 +1790,7 @@ FBO fbo_new(u32 width, u32 height) {
     .width = width,
     .height = height,
     .color_texture = color_texture,
+    .temp_texture = temp_texture,
   };
 }
 

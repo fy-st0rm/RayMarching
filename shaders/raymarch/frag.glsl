@@ -1,6 +1,7 @@
 #version 330 core
 
 layout (location = 0) out vec4 color;
+layout (location = 1) out vec4 ids;
 in vec2 screen_coord;
 
 uniform vec3 u_camera_pos;
@@ -13,97 +14,45 @@ uniform vec3 u_camera_up;
 #define MAX_GEOMETRY 32
 
 struct SceneResult {
+  int id;
   float distance;
   vec3 color;
 };
 
 // Geometries
-// :sphere
-struct Sphere {
-  vec3 center;
-  float radius;
+#define GEO_NONE   0
+#define GEO_SPHERE 1
+#define GEO_BOX    2
+struct Geometry {
+  int type;
+  int id;
   vec3 color;
+  vec3 center;
+  vec4 data;
 };
-uniform Sphere spheres[MAX_GEOMETRY];
-uniform int spheres_count;
 
-float sphere_sdf(vec3 p, vec3 center, float radius) {
-  return length(p - center) - radius;
-}
+uniform Geometry geometries[MAX_GEOMETRY];
+uniform int geometries_count;
 
-SceneResult sphere(vec3 p, Sphere sphere) {
+
+// :sphere
+SceneResult sphere(vec3 p, int id, vec3 center, float radius, vec3 color) {
   SceneResult result;
-  result.distance = sphere_sdf(p, sphere.center, sphere.radius);
-  result.color = sphere.color;
+  result.id = id;
+  result.distance = length(p - center) - radius;
+  result.color = color;
   return result;
 }
 
 // :box
-struct Box {
-  vec3 center;
-  vec3 half_size;
-  vec3 color;
-};
-uniform Box boxes[MAX_GEOMETRY];
-uniform int boxes_count;
-
-float box_sdf(vec3 p, vec3 center, vec3 half_size) {
+SceneResult box(vec3 p, int id, vec3 center, vec3 half_size, vec3 color) {
   vec3 q = abs(p - center) - half_size;
-  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
 
-SceneResult box(vec3 p, Box box) {
   SceneResult result;
-  result.distance = box_sdf(p, box.center, box.half_size);
-  result.color = box.color;
+  result.id = id;
+  result.distance = length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+  result.color = color;
   return result;
-}
-
-// :cone 
-struct Cone {
-  vec3 center;
-  float radius;
-  float height;
-  vec3 color;
-};
-uniform Cone cones[MAX_GEOMETRY];
-uniform int cones_count;
-
-float cone_sdf(vec3 p, vec3 center, float radius, float height)
-{
-    p -= center;
-
-    // Cone centered at center
-    p.y += height * 0.5;
-
-    vec2 q = vec2(length(p.xz), p.y);
-
-    vec2 c = vec2(radius, height);
-
-    vec2 w = q - vec2(0.0, height);
-
-    vec2 a = w - c * clamp(dot(w, c) / dot(c, c), 0.0, 1.0);
-    vec2 b = w - c * vec2(clamp(w.x / c.x, 0.0, 1.0), 1.0);
-
-    float k = sign(c.y);
-    float d = min(dot(a,a), dot(b,b));
-
-    float s = max(k*(q.x*c.y-q.y*c.x),k*(q.y-c.y));
-
-    return sqrt(d) * sign(s);
-}
-
-SceneResult cone(vec3 p, Cone cone)
-{
-    SceneResult result;
-    result.distance = cone_sdf(
-        p,
-        cone.center,
-        cone.height,
-        cone.radius
-    );
-    result.color = cone.color;
-    return result;
 }
 
 // Ray marching operations
@@ -120,6 +69,10 @@ SceneResult smooth_union(SceneResult a, SceneResult b, float k) {
   );
 
   SceneResult result;
+  if (a.distance < b.distance)
+      result.id = a.id;
+  else
+      result.id = b.id;
   result.distance = mix(b.distance, a.distance, h) - k * h * (1.0 - h);
   result.color = mix(b.color, a.color, h);
 
@@ -128,22 +81,36 @@ SceneResult smooth_union(SceneResult a, SceneResult b, float k) {
 
 SceneResult scene(vec3 p) {
   SceneResult result;
+  result.id = GEO_NONE;
   result.distance = 1e20;
   result.color = vec3(0);
 
-  // Spheres
-  for (int i = 0; i < spheres_count; i++) {
-    result = smooth_union(result, sphere(p, spheres[i]), 0.5);
-  }
+  for (int i = 0; i < geometries_count; i++) {
+    SceneResult temp;
 
-  // Boxes
-  for (int i = 0; i < boxes_count; i++) {
-    result = smooth_union(result, box(p, boxes[i]), 0.5);
-  }
+    switch (geometries[i].type) {
+    case GEO_SPHERE:
+        temp = sphere(
+            p,
+            geometries[i].id,
+            geometries[i].center,
+            geometries[i].data.x,
+            geometries[i].color
+        );
+        break;
+    
+    case GEO_BOX:
+        temp = box(
+            p,
+            geometries[i].id,
+            geometries[i].center,
+            geometries[i].data.xyz,
+            geometries[i].color
+        );
+        break;
+    }
 
-  // Cones
-  for (int i = 0; i < cones_count; i++) {
-    result = smooth_union(result, cone(p, cones[i]), 0.5);
+    result = union_op(result, temp);
   }
 
   return result;
@@ -152,6 +119,7 @@ SceneResult scene(vec3 p) {
 // Ray march algorithm
 SceneResult ray_march(vec3 ray_origin, vec3 ray_direction) {
   SceneResult final_result;
+  final_result.id = GEO_NONE;
   final_result.distance = -1;
   final_result.color = vec3(0);
 
@@ -163,6 +131,7 @@ SceneResult ray_march(vec3 ray_origin, vec3 ray_direction) {
     SceneResult result = scene(samplePoint);
 
     if (result.distance < 0.01) {
+      final_result.id = result.id;
       final_result.distance = travel;
       final_result.color = result.color;
       break;
@@ -213,7 +182,8 @@ void main() {
 
   SceneResult result = ray_march(ray_origin, ray_direction);
   if (result.distance < 0) {
-    color = vec4(result.color, 1);
+    color = vec4(0, 0, 0, 1);
+    ids = vec4(0, 0, 0, 0);
   } else {
     vec3 hitPoint = ray_origin + ray_direction * result.distance;
     vec3 normal = calculate_normal(hitPoint);
@@ -242,6 +212,7 @@ void main() {
 
     // Gamma correction
     finalColor = pow(finalColor, vec3(1.0 / 2.2));
-    color = vec4(finalColor, 1.0);
+    color = vec4(finalColor, 1);
+    ids = vec4(float(result.id) / 255.0, 0.0, 0.0, 1.0);
   }
 }

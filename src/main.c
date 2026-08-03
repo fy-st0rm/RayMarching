@@ -5,8 +5,9 @@ extern Context* ctx;
 
 // :config
 #define FPS 60
-#define SPEED 250.0f
+#define SPEED 150.0f
 #define MAX_GEOMETRY 32
+#define DOWN_SCALE 2.0f
 
 char* controls_text = 
   "WASD    - Movement\n"
@@ -22,24 +23,29 @@ typedef enum {
 } Shaders;
 
 // :geometry def
-typedef struct {
-  v3 center;
-  f32 radius;
-  v3 color;
-} Sphere;
+typedef enum {
+  GEO_NONE,
+  GEO_SPHERE,
+  GEO_BOX,
+  GEO_TOTAL,
+} GeometryType;
 
 typedef struct {
-  v3 center;
-  v3 half_size;
+  GeometryType type;
+  i32 id;
   v3 color;
-} Box;
+  v3 center;
 
-typedef struct {
-  v3 center;
-  f32 radius;
-  f32 height;
-  v3 color;
-} Cone;
+  union {
+    struct {
+      f32 radius;
+    } sphere;
+
+    struct {
+      v3 half_size;
+    } box;
+  };
+} Geometry;
 
 // :state def
 typedef enum {
@@ -51,6 +57,12 @@ typedef enum {
   BACK,
   TOTAL_DIR,
 } Dir;
+
+typedef enum {
+  CON_MOUSE,
+  CON_CAMERA,
+  CON_OBJECT,
+} ControlType;
 
 typedef struct {
   Window window;
@@ -71,33 +83,32 @@ typedef struct {
   b8 movement[TOTAL_DIR];
 
   // Scene
-  Sphere spheres[MAX_GEOMETRY];
-  i32 spheres_count;
+  Geometry geometries[MAX_GEOMETRY];
+  i32 geometries_count;
 
-  Box boxes[MAX_GEOMETRY];
-  i32 boxes_count;
-
-  Cone cones[MAX_GEOMETRY];
-  i32 cones_count;
+  // Control
+  ControlType current_control;
+  i32 selected_obj;
 } State;
 
 State state = {0}; // Global state variable
 
 void state_init();
 void state_clean();
+void state_handle_control(Event event);
+void state_update_program();
+
 void load_shaders();
 void upload_uniforms();
 
-void add_sphere(Sphere sphere);
-void add_box(Box box);
-void upload_sphere();
-void upload_box();
-void upload_cone();
+void clear_scene();
+void add_geometry(GeometryType type);
 void upload_geometries();
 
-// :movement def
-void movement_event(Event event);
-void movement_update();
+i32 select_geometry();
+
+void camera_movement_event(Event event);
+void camera_movement_update();
 
 // :state impl
 void state_init() {
@@ -128,10 +139,14 @@ void state_init() {
     }
   );
 
-  state.rendered_frame = fbo_new(state.window.width / 2, state.window.height / 2);
+  state.rendered_frame = fbo_new(
+    state.window.width / DOWN_SCALE,
+    state.window.height / DOWN_SCALE
+  );
 
   state.font = font_new("font.otf", 16);
   state.help = false;
+  state.current_control = CON_MOUSE;
 
   load_shaders();
 }
@@ -141,6 +156,32 @@ void state_clean() {
   font_delete(&state.font);
   imr_delete(&state.imr);
   window_delete(state.window);
+}
+
+void state_handle_control(Event event) {
+  if (event.type == KEYDOWN) {
+    switch (event.e.key) {
+      case GLFW_KEY_ESCAPE: {
+        if (state.current_control == CON_MOUSE) {
+          state.camera.mouse_enable = true;
+          state.current_control = CON_CAMERA;
+        } else if (state.current_control == CON_CAMERA) {
+          state.camera.mouse_enable = false;
+          state.current_control = CON_MOUSE;
+        }
+      } break;
+    }
+  }
+
+  if (state.current_control == CON_CAMERA) {
+    camera_movement_event(event);
+  }
+}
+
+void state_update_program() {
+  if (state.current_control == CON_CAMERA) {
+    camera_movement_update();
+  }
 }
 
 void load_shaders() {
@@ -177,170 +218,131 @@ void upload_uniforms() {
   }
 }
 
-void add_sphere(Sphere sphere) {
-  panic(
-    state.spheres_count + 1 < MAX_GEOMETRY,
-    "Cannot fit any more spheres."
-  );
-
-  state.spheres[state.spheres_count++] = sphere;
+void clear_scene() {
+  state.geometries_count = 0;
 }
 
-void add_box(Box box) {
-  panic(
-    state.boxes_count + 1 < MAX_GEOMETRY,
-    "Cannot fit any more boxes."
-  );
+void add_geometry(GeometryType type) {
+  Geometry geo = {
+    .type = type,
+    .id = state.geometries_count + 1,
+    .color = (v3) { 1, 1, 1 },
+    .center = (v3) { 0, 0, 0 },
+  };
 
-  state.boxes[state.boxes_count++] = box;
-}
+  switch (type) {
+    case GEO_SPHERE: {
+      geo.sphere.radius = 1.0f;
+    } break;
 
-void add_cone(Cone cone) {
-  panic(
-    state.cones_count + 1 < MAX_GEOMETRY,
-    "Cannot fit any more cones."
-  );
-
-  state.cones[state.cones_count++] = cone;
-}
-
-void upload_sphere() {
-  Shader shader = state.shaders[SHADER_RAYMARCH];
-
-  for (i32 i = 0; i < state.spheres_count; i++) {
-    Sphere sphere = state.spheres[i];
-
-    char uniform[64];
-
-    snprintf(uniform, sizeof(uniform), "spheres[%d].center", i);
-    GLint loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform3f(
-      loc,
-      sphere.center.x,
-      sphere.center.y,
-      sphere.center.z
-    ));
-
-    snprintf(uniform, sizeof(uniform), "spheres[%d].radius", i);
-    loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform1f(
-      loc,
-      sphere.radius
-    ));
-
-    snprintf(uniform, sizeof(uniform), "spheres[%d].color", i);
-    loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform3f(
-      loc,
-      sphere.color.x,
-      sphere.color.y,
-      sphere.color.z
-    ));
+    case GEO_BOX: {
+      geo.box.half_size = (v3) { 0.5, 0.5, 0.5 };
+    } break;
   }
 
-  GLint loc = GLCall(glGetUniformLocation(shader, "spheres_count"));
-  GLCall(glUniform1i(loc, state.spheres_count));
-}
-
-void upload_box() {
-  Shader shader = state.shaders[SHADER_RAYMARCH];
-
-  for (i32 i = 0; i < state.boxes_count; i++) {
-    Box box = state.boxes[i];
-
-    char uniform[64];
-
-    snprintf(uniform, sizeof(uniform), "boxes[%d].center", i);
-    GLint loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform3f(
-      loc,
-      box.center.x,
-      box.center.y,
-      box.center.z
-    ));
-
-    snprintf(uniform, sizeof(uniform), "boxes[%d].half_size", i);
-    loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform3f(
-      loc,
-      box.half_size.x,
-      box.half_size.y,
-      box.half_size.z
-    ));
-
-    snprintf(uniform, sizeof(uniform), "boxes[%d].color", i);
-    loc = GLCall(glGetUniformLocation(shader, uniform));
-    GLCall(glUniform3f(
-      loc,
-      box.color.x,
-      box.color.y,
-      box.color.z
-    ));
-  }
-
-  GLint loc = GLCall(glGetUniformLocation(shader, "boxes_count"));
-  GLCall(glUniform1i(loc, state.boxes_count));
-}
-
-void upload_cone() {
-    Shader shader = state.shaders[SHADER_RAYMARCH];
-
-    for (i32 i = 0; i < state.cones_count; i++) {
-        Cone cone = state.cones[i];
-
-        char uniform[64];
-
-        snprintf(uniform, sizeof(uniform), "cones[%d].center", i);
-        GLint loc = GLCall(glGetUniformLocation(shader, uniform));
-        GLCall(glUniform3f(
-            loc,
-            cone.center.x,
-            cone.center.y,
-            cone.center.z
-        ));
-
-        snprintf(uniform, sizeof(uniform), "cones[%d].radius", i);
-        loc = GLCall(glGetUniformLocation(shader, uniform));
-        GLCall(glUniform1f(
-            loc,
-            cone.radius
-        ));
-
-        snprintf(uniform, sizeof(uniform), "cones[%d].height", i);
-        loc = GLCall(glGetUniformLocation(shader, uniform));
-        GLCall(glUniform1f(
-            loc,
-            cone.height
-        ));
-
-        snprintf(uniform, sizeof(uniform), "cones[%d].color", i);
-        loc = GLCall(glGetUniformLocation(shader, uniform));
-        GLCall(glUniform3f(
-            loc,
-            cone.color.x,
-            cone.color.y,
-            cone.color.z
-        ));
-    }
-
-    GLint loc = GLCall(glGetUniformLocation(shader, "cones_count"));
-    GLCall(glUniform1i(loc, state.cones_count));
+  state.geometries[state.geometries_count++] = geo;
 }
 
 void upload_geometries() {
-  upload_sphere();
-  upload_box();
-  upload_cone();
+  Shader shader = state.shaders[SHADER_RAYMARCH];
+  GLint loc = 0;
+
+  for (i32 i = 0; i < state.geometries_count; i++) {
+    Geometry geo = state.geometries[i];
+
+    char uniform[64];
+
+    snprintf(uniform, sizeof(uniform), "geometries[%d].type", i);
+    loc = GLCall(glGetUniformLocation(shader, uniform));
+    GLCall(glUniform1i(
+      loc,
+      geo.type
+    ));
+
+    snprintf(uniform, sizeof(uniform), "geometries[%d].id", i);
+    loc = GLCall(glGetUniformLocation(shader, uniform));
+    GLCall(glUniform1i(
+      loc,
+      geo.id
+    ));
+
+    snprintf(uniform, sizeof(uniform), "geometries[%d].center", i);
+    loc = GLCall(glGetUniformLocation(shader, uniform));
+    GLCall(glUniform3f(
+      loc,
+      geo.center.x,
+      geo.center.y,
+      geo.center.z
+    ));
+
+    snprintf(uniform, sizeof(uniform), "geometries[%d].color", i);
+    loc = GLCall(glGetUniformLocation(shader, uniform));
+    GLCall(glUniform3f(
+      loc,
+      geo.color.x,
+      geo.color.y,
+      geo.color.z
+    ));
+
+    switch (geo.type) {
+      case GEO_SPHERE: {
+        snprintf(uniform, sizeof(uniform), "geometries[%d].data", i);
+        loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform4f(
+          loc,
+          geo.sphere.radius,
+          0,
+          0,
+          0
+        ));
+      } break;
+
+      case GEO_BOX: {
+        snprintf(uniform, sizeof(uniform), "geometries[%d].data", i);
+        loc = GLCall(glGetUniformLocation(shader, uniform));
+        GLCall(glUniform4f(
+          loc,
+          geo.box.half_size.x,
+          geo.box.half_size.y,
+          geo.box.half_size.z,
+          0
+        ));
+      } break;
+    }
+
+  }
+
+  loc = GLCall(glGetUniformLocation(shader, "geometries_count"));
+  GLCall(glUniform1i(loc, state.geometries_count));
 }
 
+i32 select_geometry() {
+  texture_bind(state.rendered_frame.temp_texture);
+  v2 mouse = event_mouse_pos(state.window);
+  mouse.y = state.window.height - mouse.y;
+  mouse.x = mouse.x / state.window.width * state.rendered_frame.width;
+  mouse.y = mouse.y / state.window.height * state.rendered_frame.height;
 
-// :movement impl
-void movement_event(Event event) {
+  GLubyte pixel[4];
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, state.rendered_frame.id);
+  glReadBuffer(GL_COLOR_ATTACHMENT1);
+
+  glReadPixels(
+    mouse.x,
+    mouse.y,
+    1,
+    1,
+    GL_RGBA,
+    GL_UNSIGNED_BYTE,
+    pixel
+  );
+
+  return pixel[0];
+}
+
+void camera_movement_event(Event event) {
   if (event.type == KEYDOWN) {
     switch (event.e.key) {
-      case GLFW_KEY_ESCAPE:
-        state.camera.mouse_enable = state.camera.mouse_enable ? false : true;
-        break;
       case GLFW_KEY_W:
         state.movement[FRONT] = true;
         break;
@@ -385,7 +387,10 @@ void movement_event(Event event) {
   }
 }
 
-void movement_update() {
+void camera_movement_update() {
+  // Camera control using mouse
+  pcamera_handle_mouse(&state.camera, state.window);
+
   if (state.movement[FRONT]) {
     pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, SPEED * state.fc.dt));
   }
@@ -411,48 +416,13 @@ int main() {
   state_init();
   log_info("Opengl Version: %s\n", glGetString(GL_VERSION));
 
-  add_sphere((Sphere) {
-    .center = (v3) {4.5,3,-1},
-    .radius = 1.0f,
-    .color = (v3) {1, 0, 0},
-  });
-
-  add_sphere((Sphere) {
-    .center = (v3) {3,0,0},
-    .radius = 1.0f,
-    .color = (v3) {1, 1, 0},
-  });
-
-  add_box((Box) {
-    .center = (v3) { 4, 0, 0 },
-    .half_size = (v3) { 1, 1, 1 },
-    .color = (v3) { 0, 0, 1 },
-  });
-
-  // Platform
-  add_box((Box) {
-    .center = (v3) { 0, -2, 0 },
-    .half_size = (v3) { 50, 0.5, 50 },
-    .color = (v3) { 1, 1, 1 },
-  });
-
-  // add_cone((Cone) {
-  //   .center = (v3) { 0, 1.5f, 0 },
-  //   .radius = 1.0f,
-  //   .height = 2.0f,
-  //   .color = (v3) { 1, 0, 0 },
-  // });
-
-  mu_Context ui;
-  mu_init(&ui);
-
   while (!state.window.should_close) {
     frame_controller_start(&state.fc);
 
     // Event handling
     Event event = {0};
     while (event_poll(state.window, &event)) {
-      movement_event(event);
+      state_handle_control(event);
       if (event.type == KEYDOWN) {
         switch (event.e.key) {
           case GLFW_KEY_H: {
@@ -460,24 +430,38 @@ int main() {
           } break;
         }
       }
+      else if (event.type == MOUSE_BUTTON_DOWN) {
+        switch (event.e.button) {
+          case MOUSE_BUTTON_LEFT: {
+            if (state.current_control == CON_MOUSE) {
+              i32 obj = select_geometry();
+              if (obj > 0) {
+                state.current_control = CON_OBJECT;
+                state.selected_obj = obj;
+              }
+            }
+          } break;
+        }
+      }
     }
 
-    // Camera movement
-    movement_update();
+    state_update_program();
 
     // Rendering pass
     {
       fbo_bind(&state.rendered_frame);
-      glViewport(0, 0, state.rendered_frame.width, state.rendered_frame.height);
+      glViewport(
+        0, 0,
+        state.rendered_frame.width, state.rendered_frame.height
+      );
 
-      // Camera mouse control
-      pcamera_handle_mouse(&state.camera, state.window);
-
-      imr_clear((v4) { .5f, .5f, .5f, 1.0f });
+      imr_clear((v4) { 0, 0, 0, 1.0f });
       imr_begin(&state.imr);
       {
-        imr_switch_shader(&state.imr, state.shaders[SHADER_RAYMARCH]);
+        clear_scene();
+        add_geometry(GEO_BOX);
 
+        imr_switch_shader(&state.imr, state.shaders[SHADER_RAYMARCH]);
         upload_uniforms();
         upload_geometries();
 
@@ -494,7 +478,7 @@ int main() {
       fbo_unbind();
     }
 
-    // UI Rendering Pass
+    // Final Rendering Pass
     {
       glViewport(0, 0, state.window.width, state.window.height);
 
@@ -518,6 +502,21 @@ int main() {
           (v4) { 1, 1, 1, 1 }
         );
 
+        // UI
+
+        // Render crosshair
+        v2 crosshair_size = { 3, 3 };
+        imr_push_quad(
+          &state.imr,
+          (v3) {
+            state.window.width / 2.0f - crosshair_size.x / 2.0f,
+            state.window.height / 2.0f - crosshair_size.y / 2.0f,
+            0
+          },
+          crosshair_size,
+          m4_identity(),
+          (v4) { 0, 1, 0, 1 }
+        );
 
         // Render FPS
         char text[100];
