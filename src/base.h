@@ -1549,6 +1549,12 @@ void pcamera_handle_mouse(PCamera* cam, Window window) {
   );
 
   if (cam->first) {
+    event_set_mouse_pos(
+      window, (v2) {
+        window.width / 2.0f,
+        window.height / 2.0f
+      }
+    );
     cam->mp = event_mouse_pos(window);
     cam->first = false;
   }

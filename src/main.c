@@ -16,11 +16,24 @@ char* controls_text =
   "ESC     - Toggle Mouse\n"
   "h       - Close help";
 
-// :assets def
+// :common def
+typedef enum {
+  LEFT,
+  RIGHT,
+  UP,
+  DOWN,
+  FRONT,
+  BACK,
+  TOTAL_DIR,
+} Dir;
+
+// :resources def
 typedef enum {
   SHADER_RAYMARCH,
   TOTAL_SHADERS,
 } Shaders;
+
+void resource_load();
 
 // :geometry def
 typedef enum {
@@ -49,19 +62,9 @@ typedef struct {
 
 // :state def
 typedef enum {
-  LEFT,
-  RIGHT,
-  UP,
-  DOWN,
-  FRONT,
-  BACK,
-  TOTAL_DIR,
-} Dir;
-
-typedef enum {
   CON_MOUSE,
   CON_CAMERA,
-  CON_OBJECT,
+  CON_GEOMETRY,
 } ControlType;
 
 typedef struct {
@@ -88,7 +91,7 @@ typedef struct {
 
   // Control
   ControlType current_control;
-  i32 selected_obj;
+  i32 selected_geo;
 } State;
 
 State state = {0}; // Global state variable
@@ -97,18 +100,27 @@ void state_init();
 void state_clean();
 void state_handle_control(Event event);
 void state_update_program();
+void state_clear();
+void state_add_geometry(GeometryType type);
+void state_upload_uniforms();
+void state_upload_geometries();
+i32  state_select_geometry();
+Geometry* state_get_geometry(i32 id);
 
-void load_shaders();
-void upload_uniforms();
+// :editor def
+void editor_geometry_movement_event(Event event);
+void editor_camera_movement_event(Event event);
+void editor_camera_movement_update();
 
-void clear_scene();
-void add_geometry(GeometryType type);
-void upload_geometries();
+// :resource impl
+void resource_load() {
+  state.shaders[SHADER_RAYMARCH] = shader_new_from_file(
+    "shaders/raymarch/vert.glsl",
+    "shaders/raymarch/frag.glsl"
+  );
 
-i32 select_geometry();
-
-void camera_movement_event(Event event);
-void camera_movement_update();
+  state.font = font_new("font.otf", 16);
+}
 
 // :state impl
 void state_init() {
@@ -144,11 +156,11 @@ void state_init() {
     state.window.height / DOWN_SCALE
   );
 
-  state.font = font_new("font.otf", 16);
   state.help = false;
-  state.current_control = CON_MOUSE;
+  state.current_control = CON_CAMERA;
+  state.camera.mouse_enable = true;
 
-  load_shaders();
+  resource_load();
 }
 
 void state_clean() {
@@ -162,36 +174,73 @@ void state_handle_control(Event event) {
   if (event.type == KEYDOWN) {
     switch (event.e.key) {
       case GLFW_KEY_ESCAPE: {
-        if (state.current_control == CON_MOUSE) {
+        if (state.current_control == CON_GEOMETRY) {
           state.camera.mouse_enable = true;
           state.current_control = CON_CAMERA;
-        } else if (state.current_control == CON_CAMERA) {
-          state.camera.mouse_enable = false;
-          state.current_control = CON_MOUSE;
+        }
+      } break;
+    }
+  }
+  else if (event.type == MOUSE_BUTTON_DOWN) {
+    switch (event.e.button) {
+      case MOUSE_BUTTON_LEFT: {
+        if (state.current_control == CON_CAMERA) {
+          i32 geo = state_select_geometry();
+          if (geo > 0) {
+            state.current_control = CON_GEOMETRY;
+            state.selected_geo = geo;
+            state.camera.mouse_enable = false;
+          }
         }
       } break;
     }
   }
 
-  if (state.current_control == CON_CAMERA) {
-    camera_movement_event(event);
+  switch (state.current_control) {
+    case CON_CAMERA:
+      editor_camera_movement_event(event);
+      break;
+    case CON_GEOMETRY:
+      editor_geometry_movement_event(event);
+      break;
   }
 }
 
 void state_update_program() {
+  // Camera control using mouse
+  pcamera_handle_mouse(&state.camera, state.window);
+
   if (state.current_control == CON_CAMERA) {
-    camera_movement_update();
+    editor_camera_movement_update();
   }
 }
 
-void load_shaders() {
-  state.shaders[SHADER_RAYMARCH] = shader_new_from_file(
-    "shaders/raymarch/vert.glsl",
-    "shaders/raymarch/frag.glsl"
-  );
+void state_clear() {
+  state.geometries_count = 0;
 }
 
-void upload_uniforms() {
+void state_add_geometry(GeometryType type) {
+  Geometry geo = {
+    .type = type,
+    .id = state.geometries_count + 1,
+    .color = (v3) { 1, 1, 1 },
+    .center = (v3) { 0, 0, 0 },
+  };
+
+  switch (type) {
+    case GEO_SPHERE: {
+      geo.sphere.radius = 1.0f;
+    } break;
+
+    case GEO_BOX: {
+      geo.box.half_size = (v3) { 0.5, 0.5, 0.5 };
+    } break;
+  }
+
+  state.geometries[state.geometries_count++] = geo;
+}
+
+void state_upload_uniforms() {
   {
     int loc = GLCall(glGetUniformLocation(state.shaders[SHADER_RAYMARCH], "u_resolution"));
     GLCall(glUniform2f(loc, (f32) state.rendered_frame.width, (f32) state.rendered_frame.height));
@@ -218,32 +267,7 @@ void upload_uniforms() {
   }
 }
 
-void clear_scene() {
-  state.geometries_count = 0;
-}
-
-void add_geometry(GeometryType type) {
-  Geometry geo = {
-    .type = type,
-    .id = state.geometries_count + 1,
-    .color = (v3) { 1, 1, 1 },
-    .center = (v3) { 0, 0, 0 },
-  };
-
-  switch (type) {
-    case GEO_SPHERE: {
-      geo.sphere.radius = 1.0f;
-    } break;
-
-    case GEO_BOX: {
-      geo.box.half_size = (v3) { 0.5, 0.5, 0.5 };
-    } break;
-  }
-
-  state.geometries[state.geometries_count++] = geo;
-}
-
-void upload_geometries() {
+void state_upload_geometries() {
   Shader shader = state.shaders[SHADER_RAYMARCH];
   GLint loc = 0;
 
@@ -316,20 +340,19 @@ void upload_geometries() {
   GLCall(glUniform1i(loc, state.geometries_count));
 }
 
-i32 select_geometry() {
-  texture_bind(state.rendered_frame.temp_texture);
-  v2 mouse = event_mouse_pos(state.window);
-  mouse.y = state.window.height - mouse.y;
-  mouse.x = mouse.x / state.window.width * state.rendered_frame.width;
-  mouse.y = mouse.y / state.window.height * state.rendered_frame.height;
+i32 state_select_geometry() {
+  // v2 mouse = event_mouse_pos(state.window);
+  // mouse.y = state.window.height - mouse.y;
+  // mouse.x = mouse.x / state.window.width * state.rendered_frame.width;
+  // mouse.y = mouse.y / state.window.height * state.rendered_frame.height;
 
   GLubyte pixel[4];
   glBindFramebuffer(GL_READ_FRAMEBUFFER, state.rendered_frame.id);
   glReadBuffer(GL_COLOR_ATTACHMENT1);
 
   glReadPixels(
-    mouse.x,
-    mouse.y,
+    state.rendered_frame.width / 2.0f,
+    state.rendered_frame.height / 2.0f,
     1,
     1,
     GL_RGBA,
@@ -340,7 +363,46 @@ i32 select_geometry() {
   return pixel[0];
 }
 
-void camera_movement_event(Event event) {
+Geometry* state_get_geometry(i32 id) {
+  for (i32 i = 0; i < state.geometries_count; i++) {
+    Geometry* geo = &state.geometries[i];
+    if (geo->id == id) return geo;
+  }
+  return NULL;
+}
+
+// :editor impl
+void editor_geometry_movement_event(Event event) {
+  panic(state.selected_geo > 0, "Selected Geometry ID is 0");
+
+  Geometry* geo = state_get_geometry(state.selected_geo);
+  panic(geo, "Selected Geometry is NULL");
+
+  if (event.type == KEYDOWN) {
+    switch (event.e.key) {
+      case GLFW_KEY_W:
+        geo->center.z += SPEED * state.fc.dt;
+        break;
+      case GLFW_KEY_A:
+        geo->center.x += SPEED * state.fc.dt;
+        break;
+      case GLFW_KEY_S:
+        geo->center.z -= SPEED * state.fc.dt;
+        break;
+      case GLFW_KEY_D:
+        geo->center.x -= SPEED * state.fc.dt;
+        break;
+      case GLFW_KEY_SPACE:
+        geo->center.y += SPEED * state.fc.dt;
+        break;
+      case GLFW_KEY_LEFT_SHIFT:
+        geo->center.y -= SPEED * state.fc.dt;
+        break;
+    }
+  }
+}
+
+void editor_camera_movement_event(Event event) {
   if (event.type == KEYDOWN) {
     switch (event.e.key) {
       case GLFW_KEY_W:
@@ -387,10 +449,7 @@ void camera_movement_event(Event event) {
   }
 }
 
-void camera_movement_update() {
-  // Camera control using mouse
-  pcamera_handle_mouse(&state.camera, state.window);
-
+void editor_camera_movement_update() {
   if (state.movement[FRONT]) {
     pcamera_change_pos(&state.camera, v3_mul_scalar(state.camera.forward, SPEED * state.fc.dt));
   }
@@ -416,6 +475,10 @@ int main() {
   state_init();
   log_info("Opengl Version: %s\n", glGetString(GL_VERSION));
 
+  state_clear();
+  state_add_geometry(GEO_SPHERE);
+  state_add_geometry(GEO_BOX);
+
   while (!state.window.should_close) {
     frame_controller_start(&state.fc);
 
@@ -427,19 +490,6 @@ int main() {
         switch (event.e.key) {
           case GLFW_KEY_H: {
             state.help = (state.help) ? false : true;
-          } break;
-        }
-      }
-      else if (event.type == MOUSE_BUTTON_DOWN) {
-        switch (event.e.button) {
-          case MOUSE_BUTTON_LEFT: {
-            if (state.current_control == CON_MOUSE) {
-              i32 obj = select_geometry();
-              if (obj > 0) {
-                state.current_control = CON_OBJECT;
-                state.selected_obj = obj;
-              }
-            }
           } break;
         }
       }
@@ -458,12 +508,10 @@ int main() {
       imr_clear((v4) { 0, 0, 0, 1.0f });
       imr_begin(&state.imr);
       {
-        clear_scene();
-        add_geometry(GEO_BOX);
 
         imr_switch_shader(&state.imr, state.shaders[SHADER_RAYMARCH]);
-        upload_uniforms();
-        upload_geometries();
+        state_upload_uniforms();
+        state_upload_geometries();
 
         imr_push_quad(
           &state.imr,
