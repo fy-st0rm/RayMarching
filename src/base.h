@@ -603,6 +603,7 @@ typedef struct {
 
 Font font_new(const char* path, f32 size);
 void font_render(IMR* imr, Font* font, const char* text, v3 pos, v4 color);
+v2 font_calc_size(Font* font, const char* text);
 void font_delete(Font* font);
 
 
@@ -2366,6 +2367,18 @@ void font_render(IMR* imr, Font* font, const char* text, v3 pos, v4 color) {
 
     x += g.advance;
   }
+}
+
+v2 font_calc_size(Font* font, const char* text) {
+  v2 size = {0};
+
+  for (const char* c = text; *c; c++) {
+    Glyph g = font->glyphs[(i32)*c];
+    size.x += g.advance;
+    size.y = g.size.y;
+  }
+
+  return size;
 }
 
 void font_delete(Font* font) {
