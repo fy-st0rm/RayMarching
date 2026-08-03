@@ -5,10 +5,13 @@ extern Context* ctx;
 
 // :config
 #define FPS 60
-#define SPEED 150.0f
 #define MAX_GEOMETRY 32
 #define DOWN_SCALE 2.0f
 #define FONT_SIZE 20.0f
+
+#define SPEED 150.0f
+#define GEOMETRY_SCALE_SPEED 0.1f;
+#define SMOOTHNESS_SPEED 0.01f;
 
 #define BUTTON_ENABLE_COLOR  ((v4) { 0.2, 0.2, 0.2, 1 })
 #define BUTTON_DISABLE_COLOR ((v4) { 0.5, 0.5, 0.5, 1 })
@@ -16,7 +19,8 @@ extern Context* ctx;
 #define SPAWN_GEOMETRY_PANNEL_SIZE ((v2) { 200, 300 })
 #define GEOMETRY_DATA_PANNEL_SIZE  ((v2) { 500, 200 })
 #define GEOMETRY_HELP_PANNEL_SIZE  ((v2) { 400, 200 })
-#define GEOMETRY_COLOR_PANNEL_SIZE  ((v2) { 400, 200 })
+#define GEOMETRY_COLOR_PANNEL_SIZE ((v2) { 400, 200 })
+#define SETTINGS_PANNEL_SIZE       ((v2) { 350, 300 })
 
 #define PALETTE_SIZE 64
 static v4 PALETTE[PALETTE_SIZE] = {
@@ -152,10 +156,19 @@ typedef enum {
   CON_CAMERA,
   CON_GEOMETRY,
   CON_SPAWN,
+  CON_SETTINGS,
   CON_TOTAL,
 } ControlType;
 
 char* control_type_name(ControlType type);
+
+typedef enum {
+  OP_UNION,
+  OP_INTERSECTION,
+  OP_TOTAL,
+} RenderOp;
+
+char* render_op_name(RenderOp op);
 
 typedef struct {
   Window window;
@@ -189,6 +202,10 @@ typedef struct {
   i32 selected_geo_id;
   Geometry* selected_geo;
   v4 selected_color;
+
+  // Rendering settings
+  RenderOp render_op;
+  f32 op_smoothness;
 } State;
 
 State state = {0}; // Global state variable
@@ -215,11 +232,13 @@ void pannel_spawn_geometry();
 void pannel_geometry_data();
 void pannel_geometry_help();
 void pannel_geometry_color();
+void pannel_settings();
 
 // :editor def
 void editor_movement_event(Event event);
 void editor_camera_movement_update();
 void editor_geometry_movement_update();
+void editor_settings_update();
 
 // :geometry impl
 char* geometry_name(GeometryType type) {
@@ -243,12 +262,22 @@ void resource_load() {
 
 // :state impl
 char* control_type_name(ControlType type) {
-  STATIC_ASSERT(CON_TOTAL == 3, "Update here!");
+  STATIC_ASSERT(CON_TOTAL == 4, "Update here!");
   switch (type) {
-    case CON_CAMERA: return "Camera";
-    case CON_GEOMETRY: return "Geometry";
-    case CON_SPAWN: return "Spawn";
+    case CON_CAMERA: return "FPS Camera";
+    case CON_GEOMETRY: return "Edit Geometry";
+    case CON_SPAWN: return "Spawn Geometry";
+    case CON_SETTINGS: return "Settings";
     default: panic(0, "Unexpected type: %d", type);
+  }
+}
+
+char* render_op_name(RenderOp op) {
+  STATIC_ASSERT(OP_TOTAL == 2, "Update here!");
+  switch (op) {
+    case OP_UNION: return "Union";
+    case OP_INTERSECTION: return "Intersection";
+    default: panic(0, "Unexpected op: %d", op);
   }
 }
 
@@ -289,6 +318,9 @@ void state_init() {
   state.current_control = CON_CAMERA;
   state.camera.mouse_enable = true;
   state.selected_color = (v4) {1, 1, 1, 1};
+
+  state.render_op = OP_UNION;
+  state.op_smoothness = 0;
 
   resource_load();
 }
@@ -368,6 +400,12 @@ void state_upload_geometries() {
   Shader shader = state.shaders[SHADER_RAYMARCH];
   GLint loc = 0;
 
+  loc = GLCall(glGetUniformLocation(shader, "render_op"));
+  GLCall(glUniform1i(loc, state.render_op));
+
+  loc = GLCall(glGetUniformLocation(shader, "op_smoothness"));
+  GLCall(glUniform1f(loc, state.op_smoothness));
+
   for (i32 i = 0; i < state.geometries_count; i++) {
     Geometry geo = state.geometries[i];
 
@@ -439,11 +477,6 @@ void state_upload_geometries() {
 }
 
 i32 state_select_geometry() {
-  // v2 mouse = event_mouse_pos(state.window);
-  // mouse.y = state.window.height - mouse.y;
-  // mouse.x = mouse.x / state.window.width * state.rendered_frame.width;
-  // mouse.y = mouse.y / state.window.height * state.rendered_frame.height;
-
   GLubyte pixel[4];
   glBindFramebuffer(GL_READ_FRAMEBUFFER, state.rendered_frame.id);
   glReadBuffer(GL_COLOR_ATTACHMENT1);
@@ -475,7 +508,8 @@ void state_handle_control(Event event) {
       case GLFW_KEY_ESCAPE: {
         if (
           state.current_control == CON_GEOMETRY ||
-          state.current_control == CON_SPAWN
+          state.current_control == CON_SPAWN    ||
+          state.current_control == CON_SETTINGS
         ) {
           state.camera.mouse_enable = true;
           state.current_control = CON_CAMERA;
@@ -489,6 +523,11 @@ void state_handle_control(Event event) {
         state.rshift_hold = true;
       } break;
 
+      case GLFW_KEY_C: {
+        state.camera.mouse_enable = false;
+        state.current_control = CON_SETTINGS;
+      } break;
+
       case GLFW_KEY_DELETE: {
         if (state.current_control == CON_GEOMETRY) {
           state_delete_geometry(state.selected_geo_id);
@@ -496,13 +535,6 @@ void state_handle_control(Event event) {
           state.selected_geo = NULL;
           state.current_control = CON_CAMERA;
           state.camera.mouse_enable = true;
-        }
-      } break;
-
-      case GLFW_KEY_G: {
-        if (state.current_control == CON_CAMERA) {
-          state.camera.mouse_enable = false;
-          state.current_control = CON_SPAWN;
         }
       } break;
     }
@@ -538,6 +570,13 @@ void state_handle_control(Event event) {
           state.mouse_clicked = true;
         }
       } break;
+
+      case MOUSE_BUTTON_RIGHT: {
+        if (state.current_control == CON_CAMERA) {
+          state.camera.mouse_enable = false;
+          state.current_control = CON_SPAWN;
+        }
+      } break;
     }
   }
   else if (event.type == MOUSE_BUTTON_UP) {
@@ -562,6 +601,8 @@ void state_update() {
     case CON_GEOMETRY:
       editor_geometry_movement_update();
       break;
+    case CON_SETTINGS:
+      editor_settings_update();
   }
 }
 
@@ -601,6 +642,9 @@ void state_ui_pass() {
       pannel_geometry_data();
       pannel_geometry_help();
       pannel_geometry_color();
+      break;
+    case CON_SETTINGS:
+      pannel_settings();
       break;
   }
 
@@ -646,8 +690,11 @@ void state_ui_pass() {
       "WASD        - Movement\n"
       "L-SHIFT     - Go Down\n"
       "SPACE       - Go Up\n"
-      "G           - Spawn Geometry Mode\n"
-      "[Click Obj] - Edit Geometry Mode";
+      "RIGHT-CLICK - Spawn Geometry Mode\n"
+      "[Click Obj] - Edit Geometry Mode\n"
+      "ESC         - FPS Camera Mode\n"
+      "C           - Settings Mode\n"
+    ;
     font_render(
       &state.imr, &state.font, controls_text,
       (v3) { state.window.width - 400, 30, 0 },
@@ -963,6 +1010,7 @@ void pannel_geometry_help() {
     "[DOWN Arrow]     - Z size increment\n"
     "[RIGHT Arrow]    - X size increment\n"
     "RSHIFT + [Arrow] - size decrement\n"
+    "DELETE           - Delete geometry"
   ;
 
   v2 label_size = font_calc_size(&state.font, text);
@@ -1039,6 +1087,116 @@ void pannel_geometry_color() {
     m4_identity(),
     state.selected_color
   );
+}
+
+void pannel_settings() {
+  f32 gap = 10.0f;
+  f32 item_gap = 15.0f;
+  v2 pannel_size = SETTINGS_PANNEL_SIZE;
+  v3 pannel_pos = {
+    state.window.width - pannel_size.x - gap,
+    state.window.height - pannel_size.y - gap,
+    1
+  };
+
+  // Render pannel
+  imr_push_quad(
+    &state.imr,
+    pannel_pos,
+    pannel_size,
+    m4_identity(),
+    (v4) { 0.5, 0.5, 0.5, 0.5 }
+  );
+
+  // Render label
+  const char* label = "Settings";
+  v2 label_size = font_calc_size(&state.font, label);
+  v3 label_pos = {
+    pannel_pos.x + pannel_size.x / 2 - label_size.x / 2,
+    pannel_pos.y + label_size.y + item_gap,
+    1
+  };
+  font_render(
+    &state.imr,
+    &state.font,
+    label,
+    label_pos,
+    (v4) { 1, 1, 1, 1 }
+  );
+
+  v3 start_pos = {
+    pannel_pos.x + item_gap,
+    label_pos.y + label_size.y * 3 + item_gap,
+    1
+  };
+  v2 button_size = { 130, 30 };
+
+  // Render Operation Type
+  {
+    const char* label = "Operation: ";
+    v2 label_size = font_calc_size(&state.font, label);
+    font_render(
+      &state.imr,
+      &state.font,
+      label,
+      start_pos,
+      (v4) { 1, 1, 1, 1 }
+    );
+
+    if (button(render_op_name(state.render_op), (Rect) {
+      start_pos.x + label_size.x + item_gap,
+      start_pos.y - label_size.y / 2 - button_size.y / 2,
+      button_size.x, button_size.y
+    })) {
+      state.render_op = (state.render_op == OP_UNION) ? OP_INTERSECTION: OP_UNION;
+    }
+
+    start_pos.y += button_size.y + item_gap;
+  }
+
+  // Render Smoothness
+  {
+    char label[100];
+    snprintf(label, sizeof(label), "Smoothness: %.2f", state.op_smoothness);
+    v2 label_size = font_calc_size(&state.font, label);
+    font_render(
+      &state.imr,
+      &state.font,
+      label,
+      start_pos,
+      (v4) { 1, 1, 1, 1 }
+    );
+    start_pos.y += button_size.y + item_gap;
+  }
+
+  // Divider
+  {
+    imr_push_quad(
+      &state.imr,
+      (v3) { pannel_pos.x, start_pos.y, 1 },
+      (v2) { pannel_size.x, 2.0f },
+      m4_identity(),
+      (v4) { 1, 1, 1, 1 }
+    );
+    start_pos.y += button_size.y + item_gap;
+  }
+
+  // Render Help
+  {
+    const char* label =
+      "[UP Arrow]   - Inc Smoothness\n"
+      "[DOWN Arrow] - Dec Smoothness"
+    ;
+    v2 label_size = font_calc_size(&state.font, label);
+    font_render(
+      &state.imr,
+      &state.font,
+      label,
+      start_pos,
+      (v4) { 1, 1, 1, 1 }
+    );
+  }
+
 }
 
 // :editor impl
@@ -1162,9 +1320,9 @@ void editor_geometry_movement_update() {
         state.size[RIGHT]
       ) {
         if (state.rshift_hold) {
-          geo->sphere.radius -= 0.1f;
+          geo->sphere.radius -= GEOMETRY_SCALE_SPEED;
         } else {
-          geo->sphere.radius += 0.1f;
+          geo->sphere.radius += GEOMETRY_SCALE_SPEED;
         }
       }
     } break;
@@ -1172,26 +1330,39 @@ void editor_geometry_movement_update() {
     case GEO_BOX: {
       if (state.size[UP]) {
         if (state.rshift_hold) {
-          geo->box.half_size.y -= 0.1f;
+          geo->box.half_size.y -= GEOMETRY_SCALE_SPEED;
         } else {
-          geo->box.half_size.y += 0.1f;
+          geo->box.half_size.y += GEOMETRY_SCALE_SPEED;
         }
       }
       if (state.size[DOWN]) {
         if (state.rshift_hold) {
-          geo->box.half_size.z -= 0.1f;
+          geo->box.half_size.z -= GEOMETRY_SCALE_SPEED;
         } else {
-          geo->box.half_size.z += 0.1f;
+          geo->box.half_size.z += GEOMETRY_SCALE_SPEED;
         }
       }
       if (state.size[RIGHT]) {
         if (state.rshift_hold) {
-          geo->box.half_size.x -= 0.1f;
+          geo->box.half_size.x -= GEOMETRY_SCALE_SPEED;
         } else {
-          geo->box.half_size.x += 0.1f;
+          geo->box.half_size.x += GEOMETRY_SCALE_SPEED;
         }
       }
     } break;
+  }
+}
+
+void editor_settings_update() {
+  if (state.size[UP]) {
+    state.op_smoothness += SMOOTHNESS_SPEED;
+    if (state.op_smoothness >= 1.0f)
+      state.op_smoothness = 1.0f;
+  }
+  if (state.size[DOWN]) {
+    state.op_smoothness -= SMOOTHNESS_SPEED;
+    if (state.op_smoothness <= 0.0f)
+      state.op_smoothness = 0.0f;
   }
 }
 

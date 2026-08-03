@@ -34,6 +34,11 @@ struct Geometry {
 uniform Geometry geometries[MAX_GEOMETRY];
 uniform int geometries_count;
 
+// Render Operation
+#define OP_UNION 0
+#define OP_INTERSECTION 1
+uniform int render_op;
+uniform float op_smoothness;
 
 // :sphere
 SceneResult sphere(vec3 p, int id, vec3 center, float radius, vec3 color) {
@@ -62,6 +67,9 @@ SceneResult union_op(SceneResult a, SceneResult b) {
 }
 
 SceneResult smooth_union(SceneResult a, SceneResult b, float k) {
+  if (a.distance > 1e19) return b;
+  if (b.distance > 1e19) return a;
+
   float h = clamp(
     0.5 + 0.5 * (b.distance - a.distance) / k,
     0.0,
@@ -69,11 +77,31 @@ SceneResult smooth_union(SceneResult a, SceneResult b, float k) {
   );
 
   SceneResult result;
-  if (a.distance < b.distance)
-      result.id = a.id;
-  else
-      result.id = b.id;
+  result.id = (a.distance < b.distance) ? a.id : b.id;
   result.distance = mix(b.distance, a.distance, h) - k * h * (1.0 - h);
+  result.color = mix(b.color, a.color, h);
+
+  return result;
+}
+
+SceneResult intersection_op(SceneResult a, SceneResult b) {
+  if (a.distance > b.distance) return a;
+  return b;
+}
+
+SceneResult smooth_intersection(SceneResult a, SceneResult b, float k) {
+  if (a.distance > 1e19) return b;
+  if (b.distance > 1e19) return a;
+
+  float h = clamp(
+    0.5 - 0.5 * (b.distance - a.distance) / k,
+    0.0,
+    1.0
+  );
+
+  SceneResult result;
+  result.id = (a.distance > b.distance) ? a.id : b.id;
+  result.distance = mix(b.distance, a.distance, h) + k * h * (1.0 - h);
   result.color = mix(b.color, a.color, h);
 
   return result;
@@ -98,7 +126,7 @@ SceneResult scene(vec3 p) {
             geometries[i].color
         );
         break;
-    
+
     case GEO_BOX:
         temp = box(
             p,
@@ -110,7 +138,12 @@ SceneResult scene(vec3 p) {
         break;
     }
 
-    result = union_op(result, temp);
+    if (render_op == OP_UNION) {
+      result = smooth_union(result, temp, op_smoothness);
+    }
+    else if (render_op == OP_INTERSECTION) {
+      result = smooth_intersection(result, temp, op_smoothness);
+    }
   }
 
   return result;
