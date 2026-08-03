@@ -1,6 +1,6 @@
 # RayMarching
 
-![Screenshot](./ss.png)
+![Screenshot](./ss2.png)
 
 ## Run Project
 
