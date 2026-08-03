@@ -205,6 +205,63 @@ float soft_shadow(vec3 ro, vec3 rd) {
   return clamp(res, 0.0, 1.0);
 }
 
+vec3 sky(vec3 rd)
+{
+    vec3 top = vec3(0.2,0.5,1.0);
+    vec3 bottom = vec3(0.9,0.95,1.0);
+
+    float t = clamp(rd.y * 0.5 + 0.5,0.0,1.0);
+
+    vec3 col = mix(bottom, top, t);
+
+    vec3 sunDir = normalize(vec3(1.0,1.0,-1.0));
+
+    float sun = pow(max(dot(rd, sunDir),0.0),512.0);
+
+    col += vec3(1.0,0.9,0.7) * sun;
+
+    return col;
+}
+
+float gridLine(float x)
+{
+    float w = fwidth(x);
+    return 1.0 - smoothstep(0.0, w, abs(fract(x) - 0.5));
+}
+
+vec3 background(vec3 ro, vec3 rd)
+{
+    // Looking upward -> sky
+    if (rd.y >= 0.0)
+        return sky(rd);
+
+    // Intersect with y = 0 plane
+    float t = -ro.y / rd.y;
+
+    if (t < 0.0)
+        return sky(rd);
+
+    vec3 p = ro + rd * t;
+
+    vec3 c = vec3(0.2);
+
+    // Grid
+    float grid = max(gridLine(p.x), gridLine(p.z));
+
+    if (grid > 0.0)
+        c = vec3(0.45);
+
+    // X axis (red)
+    if (abs(p.z) < 0.02)
+        c = vec3(1,0,0);
+
+    // Z axis (blue)
+    if (abs(p.x) < 0.02)
+        c = vec3(0,0,1);
+
+    return c;
+}
+
 void main() {
   vec3 ray_origin = u_camera_pos;
   vec3 ray_direction = normalize(
@@ -215,8 +272,8 @@ void main() {
 
   SceneResult result = ray_march(ray_origin, ray_direction);
   if (result.distance < 0) {
-    color = vec4(0, 0, 0, 1);
-    ids = vec4(0, 0, 0, 0);
+    color = vec4(background(ray_origin, ray_direction), 1.0);
+    ids = vec4(0);
   } else {
     vec3 hitPoint = ray_origin + ray_direction * result.distance;
     vec3 normal = calculate_normal(hitPoint);
