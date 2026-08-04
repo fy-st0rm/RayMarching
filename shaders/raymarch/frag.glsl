@@ -10,7 +10,7 @@ uniform vec3 u_camera_right;
 uniform vec3 u_camera_up;
 
 // Config
-#define MAX_ITERATION 200
+#define MAX_ITERATION 100
 #define MAX_GEOMETRY 32
 
 struct SceneResult {

@@ -6,10 +6,10 @@ extern Context* ctx;
 // :config
 #define FPS 60
 #define MAX_GEOMETRY 32
-#define DOWN_SCALE 2.0f
+#define DOWN_SCALE 3.0f
 #define FONT_SIZE 20.0f
 
-#define SPEED 150.0f
+#define SPEED 10.0f
 #define GEOMETRY_SCALE_SPEED 0.1f;
 #define SMOOTHNESS_SPEED 0.01f;
 
@@ -119,6 +119,7 @@ typedef enum {
 // :resources def
 typedef enum {
   SHADER_RAYMARCH,
+  SHADER_UPSCALE,
   TOTAL_SHADERS,
 } Shaders;
 
@@ -223,6 +224,7 @@ void state_handle_control(Event event);
 void state_update();
 void state_raymarch_pass();
 void state_ui_pass();
+void state_upscale_pass();
 void state_render();
 
 // :ui def
@@ -252,9 +254,14 @@ char* geometry_name(GeometryType type) {
 
 // :resource impl
 void resource_load() {
+  STATIC_ASSERT(TOTAL_SHADERS == 2, "Update here!");
   state.shaders[SHADER_RAYMARCH] = shader_new_from_file(
     "shaders/raymarch/vert.glsl",
     "shaders/raymarch/frag.glsl"
+  );
+  state.shaders[SHADER_UPSCALE] = shader_new_from_file(
+    "shaders/upscale/vert.glsl",
+    "shaders/upscale/frag.glsl"
   );
 
   state.font = font_new("font.otf", FONT_SIZE);
@@ -709,8 +716,45 @@ void state_ui_pass() {
   }
 }
 
+void state_upscale_pass() {
+  i32 loc;
+
+  glViewport(0, 0, state.window.width, state.window.height);
+  imr_begin(&state.imr);
+  {
+    Shader shader = state.shaders[SHADER_UPSCALE];
+    imr_switch_shader(
+      &state.imr,
+      shader
+    );
+
+    // Bind the raymarch rendered frame
+    texture_bind(state.rendered_frame.color_texture);
+
+    loc = GLCall(glGetUniformLocation(shader, "u_texture"));
+    GLCall(glUniform1i(loc, state.rendered_frame.color_texture.id));
+
+    loc = GLCall(glGetUniformLocation(shader, "u_resolution"));
+    GLCall(glUniform2f(
+      loc,
+      state.rendered_frame.width,
+      state.rendered_frame.height
+    ));
+
+    imr_push_quad(
+      &state.imr,
+      (v3) { -1, -1, 0 },
+      (v2) { 2, 2 },
+      m4_identity(),
+      (v4) { 1, 1, 1, 1 }
+    );
+  }
+  imr_end(&state.imr);
+}
+
 void state_render() {
   state_raymarch_pass();
+  state_upscale_pass();
 
   glViewport(0, 0, state.window.width, state.window.height);
   imr_begin(&state.imr);
@@ -718,18 +762,6 @@ void state_render() {
     imr_switch_shader_to_default(&state.imr);
     m4 mvp = ocamera_calc_mvp(&state.ui_camera);
     imr_update_mvp(&state.imr, mvp);
-
-    // Render the raymarched rendered texture
-    texture_bind(state.rendered_frame.color_texture);
-    imr_push_quad_tex(
-      &state.imr,
-      (v3) { 0, 0, 0 },
-      (v2) { state.window.width, state.window.height },
-      (Rect) { 0, 1, 1, -1 },
-      state.rendered_frame.color_texture.id,
-      m4_identity(),
-      (v4) { 1, 1, 1, 1 }
-    );
 
     // Render the overlay ui
     state_ui_pass();
