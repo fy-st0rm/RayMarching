@@ -6,12 +6,12 @@ extern Context* ctx;
 // :config
 #define FPS 60
 #define MAX_GEOMETRY 32
-#define DOWN_SCALE 3.0f
+#define DOWN_SCALE 1.0f
 #define FONT_SIZE 20.0f
 
 #define SPEED 10.0f
-#define GEOMETRY_SCALE_SPEED 0.1f;
-#define SMOOTHNESS_SPEED 0.01f;
+#define GEOMETRY_SCALE_SPEED 4.0f
+#define SMOOTHNESS_SPEED 1.0f
 
 #define BUTTON_ENABLE_COLOR  ((v4) { 0.2, 0.2, 0.2, 1 })
 #define BUTTON_DISABLE_COLOR ((v4) { 0.5, 0.5, 0.5, 1 })
@@ -1352,9 +1352,9 @@ void editor_geometry_movement_update() {
         state.size[RIGHT]
       ) {
         if (state.rshift_hold) {
-          geo->sphere.radius -= GEOMETRY_SCALE_SPEED;
+          geo->sphere.radius -= GEOMETRY_SCALE_SPEED * state.fc.dt;
         } else {
-          geo->sphere.radius += GEOMETRY_SCALE_SPEED;
+          geo->sphere.radius += GEOMETRY_SCALE_SPEED * state.fc.dt;
         }
       }
     } break;
@@ -1362,23 +1362,23 @@ void editor_geometry_movement_update() {
     case GEO_BOX: {
       if (state.size[UP]) {
         if (state.rshift_hold) {
-          geo->box.half_size.y -= GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.y -= GEOMETRY_SCALE_SPEED * state.fc.dt;
         } else {
-          geo->box.half_size.y += GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.y += GEOMETRY_SCALE_SPEED * state.fc.dt;
         }
       }
       if (state.size[DOWN]) {
         if (state.rshift_hold) {
-          geo->box.half_size.z -= GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.z -= GEOMETRY_SCALE_SPEED * state.fc.dt;
         } else {
-          geo->box.half_size.z += GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.z += GEOMETRY_SCALE_SPEED * state.fc.dt;
         }
       }
       if (state.size[RIGHT]) {
         if (state.rshift_hold) {
-          geo->box.half_size.x -= GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.x -= GEOMETRY_SCALE_SPEED * state.fc.dt;
         } else {
-          geo->box.half_size.x += GEOMETRY_SCALE_SPEED;
+          geo->box.half_size.x += GEOMETRY_SCALE_SPEED * state.fc.dt;
         }
       }
     } break;
@@ -1387,12 +1387,12 @@ void editor_geometry_movement_update() {
 
 void editor_settings_update() {
   if (state.size[UP]) {
-    state.op_smoothness += SMOOTHNESS_SPEED;
+    state.op_smoothness += SMOOTHNESS_SPEED * state.fc.dt;
     if (state.op_smoothness >= 1.0f)
       state.op_smoothness = 1.0f;
   }
   if (state.size[DOWN]) {
-    state.op_smoothness -= SMOOTHNESS_SPEED;
+    state.op_smoothness -= SMOOTHNESS_SPEED * state.fc.dt;
     if (state.op_smoothness <= 0.0f)
       state.op_smoothness = 0.0f;
   }
@@ -1404,7 +1404,6 @@ int main() {
   log_info("Opengl Version: %s\n", glGetString(GL_VERSION));
 
   state_clear();
-  state_add_geometry(GEO_SPHERE);
   state_add_geometry(GEO_BOX);
 
   while (!state.window.should_close) {

@@ -1,7 +1,9 @@
 # RayMarching
 
-![Screenshot](./ss1.png)
-![Screenshot](./ss2.png)
+![Screenshot](./docs/image1.png)
+![Screenshot](./docs/image2.png)
+![Screenshot](./docs/image3.png)
+![Screenshot](./docs/image4.png)
 
 ## Run Project
 
